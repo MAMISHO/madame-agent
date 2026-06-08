@@ -1,0 +1,37 @@
+providers:
+  local_small:
+    type: ollama
+    model: gemma4:12b-mlx
+    base_url: http://localhost:11434
+  local_medium:
+    type: ollama
+    model: gemma4:12b-mlx
+    base_url: http://localhost:11434
+  cloud_large:
+    type: cloud
+    provider: anthropic
+    model: claude-3-opus-20240229
+  cloud_openai:
+    type: cloud
+    provider: openai
+    model: gpt-4o
+  cloud_nvidia:
+    type: cloud
+    provider: nvidia
+    model: meta/llama-3.3-70b-instruct
+    api_key_env: NVIDIA_API_KEY
+  cloud_hf:
+    type: huggingface
+    model: meta-llama/Meta-Llama-3-8B-Instruct
+
+
+routing:
+  plan:
+    provider: cloud_nvidia
+  execution:
+    provider: local_medium
+  escalation:
+    provider: cloud_nvidia
+
+confidence:
+  threshold: 0.70
