@@ -1,0 +1,10 @@
+{
+  "model": "meta/llama-3.3-70b-instruct",
+  "messages": [
+    {
+      "role": "user",
+      "content": "say HOLA"
+    }
+  ],
+  "max_tokens": 5
+}

@@ -1,0 +1,10 @@
+{
+  "status": "ok",
+  "uptime": 6,
+  "version": "0.0.1",
+  "providers": {
+    "ollama": "configured",
+    "cloud": "configured"
+  },
+  "timestamp": "2026-06-09T23:50:42.291Z"
+}

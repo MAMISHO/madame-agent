@@ -1,0 +1,30 @@
+{
+  "model": "gemma4:12b-mlx",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Eres un asistente"
+    },
+    {
+      "role": "system",
+      "content": "Eres un asistente"
+    },
+    {
+      "role": "system",
+      "content": "Eres un asistente"
+    },
+    {
+      "role": "user",
+      "content": "decime OK"
+    },
+    {
+      "role": "user",
+      "content": "decime OK"
+    },
+    {
+      "role": "user",
+      "content": "decime OK"
+    }
+  ],
+  "max_tokens": 30
+}

@@ -1,0 +1,30 @@
+{
+  "id": "8623be9ad3fc4584aeebfe01af15a130",
+  "object": "chat.completion",
+  "created": 1781049262,
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "HOLA",
+        "reasoning_content": null,
+        "tool_calls": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "matched_stop": 1
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 7,
+    "total_tokens": 10,
+    "completion_tokens": 3,
+    "prompt_tokens_details": null,
+    "reasoning_tokens": 0
+  },
+  "metadata": {
+    "weight_version": "default"
+  }
+}

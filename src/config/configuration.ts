@@ -5,10 +5,13 @@ import { join } from 'path';
 export default () => {
   const yamlPath = process.env.ROUTING_CONFIG_PATH || 'routing.yaml';
   const fullPath = join(process.cwd(), yamlPath);
-  
+
   let routingConfig = {};
   try {
-    routingConfig = yaml.load(readFileSync(fullPath, 'utf8')) as Record<string, any>;
+    routingConfig = yaml.load(readFileSync(fullPath, 'utf8')) as Record<
+      string,
+      any
+    >;
   } catch (error) {
     console.error(`Error loading routing config from ${fullPath}:`, error);
   }

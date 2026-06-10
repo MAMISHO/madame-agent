@@ -1,0 +1,15 @@
+{
+  "model": "gemma4:12b-mlx",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Eres un arquitecto de seguridad experto. Analiza problemas de criptografía con rigor técnico."
+    },
+    {
+      "role": "user",
+      "content": "Una empresa exige:\n\n1. Todas las comunicaciones deben estar cifradas extremo a extremo.\n2. Los administradores deben poder inspeccionar cualquier mensaje en cualquier momento.\n3. Ninguna clave privada puede almacenarse fuera del dispositivo del usuario.\n4. Los usuarios deben poder recuperar mensajes si pierden todos sus dispositivos.\n\nAnaliza si los requisitos son compatibles. Si no lo son, identifica exactamente qué requisitos entran en conflicto y propón alternativas."
+    }
+  ],
+  "max_tokens": 1024,
+  "temperature": 0.3
+}

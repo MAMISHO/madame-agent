@@ -1,0 +1,14 @@
+{
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "messages": [
+    {
+      "role": "system",
+      "content": "..."
+    },
+    {
+      "role": "user",
+      "content": "Generate animated SVG..."
+    }
+  ],
+  "max_tokens": 1000
+}

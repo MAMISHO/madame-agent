@@ -1,0 +1,10 @@
+{
+  "model": "Gemma4-12B+Llama70B",
+  "messages": [
+    {
+      "role": "user",
+      "content": "decime hola"
+    }
+  ],
+  "max_tokens": 30
+}

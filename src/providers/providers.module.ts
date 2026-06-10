@@ -5,8 +5,12 @@ import { CloudProvider } from './cloud.provider';
 import { HuggingFaceProvider } from './huggingface.provider';
 
 @Module({
-  providers: [ProvidersService, OllamaProvider, CloudProvider, HuggingFaceProvider],
+  providers: [
+    ProvidersService,
+    OllamaProvider,
+    CloudProvider,
+    HuggingFaceProvider,
+  ],
   exports: [ProvidersService],
 })
 export class ProvidersModule {}
-

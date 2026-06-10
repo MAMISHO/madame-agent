@@ -14,7 +14,10 @@ export class HuggingFaceProvider implements ModelProvider {
     this.hf = new HfInference(apiKey);
   }
 
-  async chat(request: ChatCompletionRequest, modelConfig: any): Promise<ProviderResponse> {
+  async chat(
+    request: ChatCompletionRequest,
+    modelConfig: any,
+  ): Promise<ProviderResponse> {
     this.logger.debug(`Calling HuggingFace for model ${modelConfig.model}`);
 
     if (request.stream) {

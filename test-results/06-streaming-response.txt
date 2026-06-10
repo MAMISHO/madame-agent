@@ -1,0 +1,1 @@
+data: {"id":"chatcmpl-166","object":"chat.completion.chunk","created":1781049145,"model":"gemma4:12b-mlx","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"

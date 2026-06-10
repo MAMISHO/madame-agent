@@ -1,0 +1,166 @@
+import { Injectable, Logger } from '@nestjs/common';
+
+export interface RoutingInfo {
+  requestId: string;
+  mode: 'direct' | 'classifier';
+  classifierMode?: 'plan' | 'execution';
+  confidence?: number;
+  escalated: boolean;
+  providerKey: string;
+  providerType: string;
+  model: string;
+}
+
+export interface RequestMetrics {
+  requestId: string;
+  timestamp: Date;
+  latencyMs: number;
+  routing: RoutingInfo;
+  originalTokens: number;
+  finalTokens: number;
+  dedupRemoved: number;
+  success: boolean;
+  errorMessage?: string;
+}
+
+export interface MetricsSummary {
+  uptime: number;
+  requests: {
+    total: number;
+    byProvider: Record<string, number>;
+    byMode: Record<string, number>;
+  };
+  escalations: {
+    total: number;
+    rate: number;
+  };
+  tokens: {
+    inputTotal: number;
+    savedByContext: number;
+  };
+  latency: {
+    avgMs: number;
+  };
+  errors: {
+    total: number;
+    byProvider: Record<string, number>;
+  };
+}
+
+export interface HealthResponse {
+  status: string;
+  uptime: number;
+  version: string;
+  providers: Record<string, string>;
+  timestamp: string;
+}
+
+@Injectable()
+export class ObservabilityService {
+  private readonly logger = new Logger(ObservabilityService.name);
+  private readonly startTime = Date.now();
+  private readonly maxStored = 1000;
+  private requests: RequestMetrics[] = [];
+  private timers = new Map<string, number>();
+
+  startTimer(requestId: string): void {
+    this.timers.set(requestId, Date.now());
+  }
+
+  finishTimer(requestId: string): number {
+    const start = this.timers.get(requestId);
+    if (!start) return 0;
+    this.timers.delete(requestId);
+    return Date.now() - start;
+  }
+
+  trackRequest(metrics: RequestMetrics): void {
+    this.requests.push(metrics);
+    if (this.requests.length > this.maxStored) {
+      this.requests.shift();
+    }
+
+    this.logger.log(
+      `Request ${metrics.requestId}: ` +
+        `mode=${metrics.routing.mode}, ` +
+        `provider=${metrics.routing.providerKey} (${metrics.routing.model}), ` +
+        `tokens=${metrics.originalTokens}→${metrics.finalTokens}, ` +
+        `latency=${metrics.latencyMs}ms, ` +
+        `success=${metrics.success}` +
+        (metrics.routing.escalated ? ' [ESCALATED]' : ''),
+    );
+  }
+
+  getMetrics(): MetricsSummary {
+    const total = this.requests.length;
+    const byProvider: Record<string, number> = {};
+    const byMode: Record<string, number> = {};
+    let escalations = 0;
+    let inputTotal = 0;
+    let savedByContext = 0;
+    let totalLatency = 0;
+    const errorsByProvider: Record<string, number> = {};
+    let errorTotal = 0;
+
+    for (const r of this.requests) {
+      byProvider[r.routing.providerKey] = (byProvider[r.routing.providerKey] || 0) + 1;
+      byMode[r.routing.mode] = (byMode[r.routing.mode] || 0) + 1;
+      if (r.routing.escalated) escalations++;
+      inputTotal += r.originalTokens;
+      savedByContext += r.originalTokens - r.finalTokens;
+      totalLatency += r.latencyMs;
+      if (!r.success) {
+        errorTotal++;
+        errorsByProvider[r.routing.providerKey] = (errorsByProvider[r.routing.providerKey] || 0) + 1;
+      }
+    }
+
+    return {
+      uptime: Math.floor((Date.now() - this.startTime) / 1000),
+      requests: {
+        total,
+        byProvider,
+        byMode,
+      },
+      escalations: {
+        total: escalations,
+        rate: total > 0 ? escalations / total : 0,
+      },
+      tokens: {
+        inputTotal,
+        savedByContext,
+      },
+      latency: {
+        avgMs: total > 0 ? Math.round(totalLatency / total) : 0,
+      },
+      errors: {
+        total: errorTotal,
+        byProvider: errorsByProvider,
+      },
+    };
+  }
+
+  getHealth(): HealthResponse {
+    const metrics = this.getMetrics();
+    const providerStatus: Record<string, string> = {};
+    for (const key of Object.keys(metrics.requests.byProvider)) {
+      providerStatus[key] = 'active';
+    }
+    if (Object.keys(providerStatus).length === 0) {
+      providerStatus['ollama'] = 'configured';
+      providerStatus['cloud'] = 'configured';
+    }
+
+    return {
+      status: 'ok',
+      uptime: metrics.uptime,
+      version: '0.0.1',
+      providers: providerStatus,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  getRecentRequests(limit = 10): RequestMetrics[] {
+    return this.requests.slice(-limit);
+  }
+}

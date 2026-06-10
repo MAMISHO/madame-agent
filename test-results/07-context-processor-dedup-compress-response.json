@@ -1,0 +1,23 @@
+{
+  "id": "chatcmpl-501",
+  "object": "chat.completion",
+  "created": 1781049147,
+  "model": "gemma4:12b-mlx",
+  "system_fingerprint": "fp_ollama",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "reasoning": "\"decime OK\" (tell me OK / say OK).\nThe user wants the assistant to agree or acknowledge with a specific word"
+      },
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22,
+    "completion_tokens": 30,
+    "total_tokens": 52
+  }
+}

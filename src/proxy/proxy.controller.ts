@@ -3,31 +3,57 @@ import type { Request, Response } from 'express';
 import { ProxyService } from './proxy.service';
 import { ChatCompletionRequest } from './dto/openai.dto';
 import { ConfigService } from '@nestjs/config';
+import { ObservabilityService } from '../observability/observability.service';
+
+let requestCounter = 0;
 
 @Controller('v1')
 export class ProxyController {
   constructor(
     private readonly proxyService: ProxyService,
     private configService: ConfigService,
+    private observability: ObservabilityService,
   ) {}
 
   @Get('models')
   getModels() {
     const providersConfig = this.configService.get('providers') || {};
+    const modelPairs = this.configService.get('model_pairs') || [];
+
+    // Individual models from providers (only local ones + NVIDIA for direct access)
     const modelsList = Object.values(providersConfig).map((config: any) => ({
       id: config.model,
       object: 'model',
       created: Math.floor(Date.now() / 1000),
       owned_by: config.provider || config.type,
     }));
-    
-    // Deduplicate models
-    const uniqueModels = Array.from(new Map(modelsList.map(item => [item.id, item])).values());
+
+    const uniqueModels = Array.from(
+      new Map(modelsList.map((item) => [item.id, item])).values(),
+    );
+
+    // Composite model pairs
+    const pairModels = modelPairs.map((pair: any) => ({
+      id: pair.name,
+      object: 'model',
+      created: Math.floor(Date.now() / 1000),
+      owned_by: 'madame-agent',
+    }));
 
     return {
       object: 'list',
-      data: uniqueModels,
+      data: [...pairModels, ...uniqueModels],
     };
+  }
+
+  @Get('health')
+  getHealth() {
+    return this.observability.getHealth();
+  }
+
+  @Get('metrics')
+  getMetrics() {
+    return this.observability.getMetrics();
   }
 
   @Post('chat/completions')
@@ -36,22 +62,67 @@ export class ProxyController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    try {
-      const result = await this.proxyService.handleChatCompletion(body);
+    const requestId = `req_${++requestCounter}`;
+    this.observability.startTimer(requestId);
 
-      if (body.stream && result.stream) {
+    try {
+      const { response, metadata } =
+        await this.proxyService.handleChatCompletion(body);
+
+      const latencyMs = this.observability.finishTimer(requestId);
+
+      this.observability.trackRequest({
+        requestId,
+        timestamp: new Date(),
+        latencyMs,
+        routing: {
+          requestId,
+          mode: metadata.mode,
+          classifierMode: metadata.classifierMode,
+          confidence: metadata.confidence,
+          escalated: metadata.escalated,
+          providerKey: metadata.providerKey,
+          providerType: metadata.providerType,
+          model: metadata.model,
+        },
+        originalTokens: metadata.originalTokens,
+        finalTokens: metadata.finalTokens,
+        dedupRemoved: metadata.originalTokens - metadata.finalTokens,
+        success: true,
+      });
+
+      if (body.stream && response.stream) {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
-        
-        for await (const chunk of result.stream) {
+
+        for await (const chunk of response.stream) {
           res.write(chunk);
         }
         res.end();
       } else {
-        res.json(result.data);
+        res.json(response.data);
       }
     } catch (error: any) {
+      this.observability.finishTimer(requestId);
+      this.observability.trackRequest({
+        requestId,
+        timestamp: new Date(),
+        latencyMs: 0,
+        routing: {
+          requestId,
+          mode: 'direct',
+          escalated: false,
+          providerKey: 'unknown',
+          providerType: 'unknown',
+          model: body.model || 'unknown',
+        },
+        originalTokens: 0,
+        finalTokens: 0,
+        dedupRemoved: 0,
+        success: false,
+        errorMessage: error.message,
+      });
       res.status(500).json({
         error: {
           message: error.message || 'Internal Server Error',
