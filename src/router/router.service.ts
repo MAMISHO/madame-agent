@@ -170,7 +170,9 @@ export class RouterService {
     const classification = await this.classifierService.classifyTask(messagesStr);
     const decision = this.confidenceEngine.evaluate(classification);
 
-    const shouldEscalate = decision.shouldEscalate;
+    // Escalate if the task requires planning (needs powerful cloud model)
+    // OR if confidence is below threshold (unsure about classification)
+    const shouldEscalate = classification.mode === 'plan' || decision.shouldEscalate;
     const selectedConfig = shouldEscalate ? cloudConfig : localConfig;
     const providerKey = shouldEscalate ? pair.cloud : pair.local;
     const providerType = selectedConfig.type;

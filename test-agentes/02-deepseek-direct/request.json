@@ -1,0 +1,15 @@
+{
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Eres un ingeniero de software experto en tooling y automatización. Tu tarea implica operaciones sobre el sistema de archivos. Piensa paso a paso qué herramientas necesitas."
+    },
+    {
+      "role": "user",
+      "content": "En el actual proyecto /Users/mamisho/dev/madame-agent\n\nSe han hecho un par de pruebas al agente, donde se ha solicitado generar scripts para poner a prueba la solución software que se desarrolla. Dichos scripts además generan directorios con los resultados de las pruebas.\n\nTu tarea es identificar los ficheros implicados en las pruebas, ordenarlos dentro de un directorio llamado custom-test. Dentro tendrás/crearás un subdirectorio para cada prueba donde moverás los scripts, los directorios de cada prueba correspondiente, renombrando los directorios con un nombre secuencial e identificativo de la prueba de tal manera que sea reconocible qué script y pruebas pertenecen a cada set de prueba, quedando así las ejecuciones de las pruebas ordenada y que se vean en similar orden."
+    }
+  ],
+  "max_tokens": 4096,
+  "temperature": 0.3
+}

@@ -22,7 +22,7 @@ Stack: **NestJS + TypeScript**
 | F8: Semantic Cache | ⬜ PENDIENTE | |
 | F9: Translation Layer | ⬜ PENDIENTE | |
 | F10: Observability | ✅ COMPLETO | Métricas, health, logs por request |
-| F11: Tool Calling | ⬜ PENDIENTE | |
+| F11: Tool Calling | 📄 SPEC | Spec completa en docs/tool-calling-spec.md. Pendiente implementación |
 | Tests unitarios | ✅ COMPLETO | 42 tests, 7 suites |
 | Observability trackRequest | ✅ COMPLETO | RouterService devuelve RouteResult con metadata, ProxyController llama trackRequest() |
 | Conexión OpenCode | ✅ COMPLETO | Provider `madame-agent` configurado en opencode.json como OpenAI-compatible |
@@ -95,7 +95,7 @@ Stack: **NestJS + TypeScript**
 |---|---|---|---|---|
 | 6.1 | Semantic Cache | `src/cache/` (nuevo) | 1.x | Cache de respuestas vía embeddings + vector store. Requests similares devuelven respuesta cacheada sin llamar al LLM. Reduce latencia y coste cloud. |
 | 6.2 | Translation Layer | `src/translation/` (nuevo) | 1.x, 3.x | Detección y traducción automática de input no inglés antes de enviar al modelo. Usa modelo pequeño local para traducción. |
-| 6.3 | Tool Calling | `src/proxy/`, providers | 1.x | Passthrough de function calling / tool calling desde el cliente al modelo. Soporte para MCP tools. |
+| 6.3 | Tool Calling | `src/tools/` (nuevo) | 1.x | ToolLoopService + ToolRegistry + SandboxManager. Spec detallada en docs/tool-calling-spec.md. Pendiente implementación. |
 | 6.4 | Tests E2E completos | `test/` | 1.x-6.3 | Tests de integración reales contra Ollama + NVIDIA, validando todos los flujos de routing. |
 
 ### PRIORIDAD 7 — Mejoras de Observabilidad (Post-MVP) ⬜
@@ -212,3 +212,5 @@ confidence:
 - [x] Tests de integración (curl) pasan: health, models, chat completions (non-stream + stream), escalado
 - [x] Observability trackRequest integrado: métricas por request con metadata de routing
 - [ ] Reducción de llamadas cloud visibles en logs
+- [x] Tool Calling spec documentada: `docs/tool-calling-spec.md` con arquitectura, servicios, seguridad y plan de fases
+- [ ] Tool Calling implementado: ToolLoopService, ToolRegistryService, SandboxManagerService, integración en RouterService

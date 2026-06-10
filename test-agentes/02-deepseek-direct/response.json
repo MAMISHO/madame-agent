@@ -1,0 +1,30 @@
+{
+  "id": "76c346483db14ec98e65be494091b5e9",
+  "object": "chat.completion",
+  "created": 1781083125,
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Voy a analizar el proyecto para identificar los archivos y directorios relacionados con las pruebas.\n\n## Paso 1: Explorar la estructura del proyecto\n\n```bash\ncd /Users/mamisho/dev/madame-agent\nfind . -type f -name \"*.sh\" -o -type f -name \"*.py\" -o -type f -name \"*.js\" | grep -i test\n```\n\n## Paso 2: Identificar scripts de prueba y sus directorios de resultados\n\n```bash\n# Buscar scripts de prueba\nfind . -type f \\( -name \"*test*\" -o -name \"*prueba*\" \\) -exec ls -la {} \\;\n\n# Buscar directorios de resultados de pruebas\nfind . -type d \\( -name \"*result*\" -o -name \"*output*\" -o -name \"*test*\" -o -name \"*prueba*\" \\) -exec ls -la {} \\;\n```\n\n## Paso 3: Analizar los scripts para entender qué directorios generan\n\n```bash\n# Revisar el contenido de los scripts de prueba\nfor script in $(find . -type f \\( -name \"*test*\" -o -name \"*prueba*\" \\) -exec ls {} \\;); do\n    echo \"=== $script ===\"\n    head -50 \"$script\"\n    echo \"\"\ndone\n```\n\n## Paso 4: Identificar la estructura completa\n\n```bash\n# Ver todos los directorios y archivos relevantes\nfind . -type d -maxdepth 3 | sort\n```\n\nBasado en el análisis, procedo a ejecutar las operaciones necesarias:\n\n```bash\n# Crear el directorio principal custom-test\nmkdir -p custom-test\n\n# Identificar y mover los scripts de prueba\n# (Aquí asumiré nombres comunes, ajusta según lo que encuentres)\nfor script in $(find . -maxdepth 2 -type f \\( -name \"*test*.sh\" -o -name \"*prueba*.sh\" -o -name \"*test*.py\" -o -name \"*prueba*.py\" \\) 2>/dev/null); do\n    echo \"Script encontrado: $script\"\ndone\n```\n\n## Paso 5: Ejecutar la reorganización\n\n```bash\n# Crear estructura de directorios para cada prueba\n# Ejemplo: si encuentras script1.sh y script2.sh con sus directorios de resultados\nmkdir -p custom-test/test-01\nmkdir -p custom-test/test-02\n\n# Mover scripts y directorios de resultados\n# Ajusta los nombres según lo que encuentres\nmv script1.sh custom-test/test-01/ 2>/dev/null || true\nmv script2.sh custom-test/test-02/ 2>/dev/null || true\n\n# Mover directorios de resultados\nmv resultados_prueba1 custom-test/test-01/resultados 2>/dev/null || true\nmv resultados_prueba2 custom-test/test-02/resultados 2>/dev/null || true\n```\n\n## Paso 6: Verificar la estructura final\n\n```bash\necho \"Estructura final de custom-test:\"\nfind custom-test -type f -o -type d | sort\n```\n\n**Nota importante:** Necesito que me proporciones la salida de los primeros comandos para saber exactamente qué archivos y directorios existen en tu proyecto. Sin esa información, solo puedo darte la estructura genérica. Por favor, ejecuta los comandos de los Pasos 1-4 y comparte los resultados para que pueda hacer la reorganización precisa.",
+        "reasoning_content": null,
+        "tool_calls": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "matched_stop": 1
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 218,
+    "total_tokens": 987,
+    "completion_tokens": 769,
+    "prompt_tokens_details": null,
+    "reasoning_tokens": 0
+  },
+  "metadata": {
+    "weight_version": "default"
+  }
+}
