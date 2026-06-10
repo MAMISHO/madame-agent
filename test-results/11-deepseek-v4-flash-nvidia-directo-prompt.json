@@ -1,0 +1,10 @@
+{
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "messages": [
+    {
+      "role": "user",
+      "content": "say HOLA"
+    }
+  ],
+  "max_tokens": 5
+}

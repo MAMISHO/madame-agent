@@ -1,0 +1,23 @@
+{
+  "id": "chatcmpl-944",
+  "object": "chat.completion",
+  "created": 1781049051,
+  "model": "gemma4:12b-mlx",
+  "system_fingerprint": "fp_ollama",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "reasoning": "*   Internal command: \"decime solo: HOLA\" (Tell me only: HOLA).\n    *   Language:"
+      },
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22,
+    "completion_tokens": 30,
+    "total_tokens": 52
+  }
+}

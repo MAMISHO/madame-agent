@@ -1,16 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ModelProvider, ProviderResponse } from './provider.interface';
 import { ChatCompletionRequest } from '../proxy/dto/openai.dto';
-import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class OllamaProvider implements ModelProvider {
   private readonly logger = new Logger(OllamaProvider.name);
 
-  async chat(request: ChatCompletionRequest, modelConfig: any): Promise<ProviderResponse> {
+  async chat(
+    request: ChatCompletionRequest,
+    modelConfig: any,
+  ): Promise<ProviderResponse> {
     this.logger.debug(`Calling Ollama API for model ${modelConfig.model}`);
-    
-    // Convert OpenAI request to Ollama format if needed. 
+
+    // Convert OpenAI request to Ollama format if needed.
     // Ollama's /v1/chat/completions is OpenAI compatible!
     const baseUrl = modelConfig.base_url || 'http://localhost:11434';
     const url = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;

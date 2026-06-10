@@ -1,0 +1,10 @@
+{
+  "model": "qwen3.6:27b+Llama70B",
+  "messages": [
+    {
+      "role": "user",
+      "content": "decime hola"
+    }
+  ],
+  "max_tokens": 30
+}

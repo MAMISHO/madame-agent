@@ -1,0 +1,10 @@
+{
+  "model": "Gemma4-12B+DeepseekV4Flash",
+  "messages": [
+    {
+      "role": "user",
+      "content": "decime hola"
+    }
+  ],
+  "max_tokens": 30
+}

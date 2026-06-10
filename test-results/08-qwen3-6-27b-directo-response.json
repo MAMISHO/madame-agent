@@ -1,0 +1,23 @@
+{
+  "id": "chatcmpl-480",
+  "object": "chat.completion",
+  "created": 1781049190,
+  "model": "qwen3.6:27b",
+  "system_fingerprint": "fp_ollama",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "reasoning": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - User says: \"decime solo: HOLA, responde solo esa palabra despues de pensar\" (Tell me only: HOLA, respond only that word after thinking)\n   - Language: Spanish\n   - Key instruction: Respond *only* with the word \"HOLA\" after thinking.\n\n2.  **Identify Constraints:**\n   - Must output exactly \"HOLA\" (case as specified, though typically case-insensitive in practice, I'll stick to exact match)\n   - Must not include any other text, greetings, explanations, or acknowledgments\n   - The instruction \"despues de pensando\" implies internal processing/thinking is fine, but the final output must be strictly the word.\n\n3.  **Verify Compliance:**\n   - I need to ensure my response contains absolutely nothing else.\n   - Internal reasoning happens in the thinking block (which"
+      },
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 200,
+    "total_tokens": 225
+  }
+}

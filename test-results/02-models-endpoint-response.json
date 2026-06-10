@@ -1,0 +1,53 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "Gemma4-12B+DeepseekV4Flash",
+      "object": "model",
+      "created": 1781049042,
+      "owned_by": "madame-agent"
+    },
+    {
+      "id": "Gemma4-12B+Llama70B",
+      "object": "model",
+      "created": 1781049042,
+      "owned_by": "madame-agent"
+    },
+    {
+      "id": "qwen3.6:27b+DeepseekV4Flash",
+      "object": "model",
+      "created": 1781049042,
+      "owned_by": "madame-agent"
+    },
+    {
+      "id": "qwen3.6:27b+Llama70B",
+      "object": "model",
+      "created": 1781049042,
+      "owned_by": "madame-agent"
+    },
+    {
+      "id": "gemma4:12b-mlx",
+      "object": "model",
+      "created": 1781049042,
+      "owned_by": "ollama"
+    },
+    {
+      "id": "qwen3.6:27b",
+      "object": "model",
+      "created": 1781049042,
+      "owned_by": "ollama"
+    },
+    {
+      "id": "meta/llama-3.3-70b-instruct",
+      "object": "model",
+      "created": 1781049042,
+      "owned_by": "nvidia"
+    },
+    {
+      "id": "deepseek-ai/deepseek-v4-flash",
+      "object": "model",
+      "created": 1781049042,
+      "owned_by": "nvidia"
+    }
+  ]
+}

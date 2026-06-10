@@ -1,0 +1,37 @@
+{
+  "id": "chatcmpl-a99e53531629b3a8",
+  "object": "chat.completion",
+  "created": 1781049140,
+  "model": "meta/llama-3.3-70b-instruct",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "**Hola**\n\nEs un placer conocerte. \u00bfEn qu\u00e9 puedo ayudarte hoy? \u00bfTienes alguna pregunta o necesitas ayuda con algo en particular",
+        "refusal": null,
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [],
+        "reasoning": null,
+        "reasoning_content": null
+      },
+      "logprobs": null,
+      "finish_reason": "length",
+      "stop_reason": null,
+      "token_ids": null
+    }
+  ],
+  "service_tier": null,
+  "system_fingerprint": null,
+  "usage": {
+    "prompt_tokens": 39,
+    "total_tokens": 69,
+    "completion_tokens": 30,
+    "prompt_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "kv_transfer_params": null
+}

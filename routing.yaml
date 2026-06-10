@@ -7,23 +7,20 @@ providers:
     type: ollama
     model: gemma4:12b-mlx
     base_url: http://localhost:11434
-  cloud_large:
-    type: cloud
-    provider: anthropic
-    model: claude-3-opus-20240229
-  cloud_openai:
-    type: cloud
-    provider: openai
-    model: gpt-4o
+  local_qwen:
+    type: ollama
+    model: qwen3.6:27b
+    base_url: http://localhost:11434
   cloud_nvidia:
     type: cloud
     provider: nvidia
     model: meta/llama-3.3-70b-instruct
     api_key_env: NVIDIA_API_KEY
-  cloud_hf:
-    type: huggingface
-    model: meta-llama/Meta-Llama-3-8B-Instruct
-
+  cloud_nvidia_deepseek:
+    type: cloud
+    provider: nvidia
+    model: deepseek-ai/deepseek-v4-flash
+    api_key_env: NVIDIA_API_KEY
 
 routing:
   plan:
@@ -32,6 +29,24 @@ routing:
     provider: local_medium
   escalation:
     provider: cloud_nvidia
+
+model_pairs:
+  - id: gemma4-deepseek
+    name: "Gemma4-12B+DeepseekV4Flash"
+    local: local_medium
+    cloud: cloud_nvidia_deepseek
+  - id: gemma4-llama
+    name: "Gemma4-12B+Llama70B"
+    local: local_medium
+    cloud: cloud_nvidia
+  - id: qwen-deepseek
+    name: "qwen3.6:27b+DeepseekV4Flash"
+    local: local_qwen
+    cloud: cloud_nvidia_deepseek
+  - id: qwen-llama
+    name: "qwen3.6:27b+Llama70B"
+    local: local_qwen
+    cloud: cloud_nvidia
 
 confidence:
   threshold: 0.70

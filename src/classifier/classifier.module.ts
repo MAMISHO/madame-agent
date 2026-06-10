@@ -3,7 +3,6 @@ import { ClassifierService } from './classifier.service';
 
 @Module({
   providers: [ClassifierService],
-  exports: [ClassifierService]
+  exports: [ClassifierService],
 })
 export class ClassifierModule {}
-

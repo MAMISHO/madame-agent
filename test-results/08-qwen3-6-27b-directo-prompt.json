@@ -1,0 +1,10 @@
+{
+  "model": "qwen3.6:27b",
+  "messages": [
+    {
+      "role": "user",
+      "content": "decime solo: HOLA, responde solo esa palabra despues de pensar"
+    }
+  ],
+  "max_tokens": 200
+}

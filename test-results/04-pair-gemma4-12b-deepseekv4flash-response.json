@@ -1,0 +1,30 @@
+{
+  "id": "df3af18392714fc78ee4011157ec72c4",
+  "object": "chat.completion",
+  "created": 1781049057,
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "\u00a1Hola! \u00bfEn qu\u00e9 puedo ayudarte hoy?",
+        "reasoning_content": null,
+        "tool_calls": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "matched_stop": 1
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 8,
+    "total_tokens": 22,
+    "completion_tokens": 14,
+    "prompt_tokens_details": null,
+    "reasoning_tokens": 0
+  },
+  "metadata": {
+    "weight_version": "default"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "just make it work somehow i dunno what to do"
+    }
+  ],
+  "max_tokens": 15
+}

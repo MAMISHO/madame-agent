@@ -9,9 +9,14 @@ export class CloudProvider implements ModelProvider {
 
   constructor(private configService: ConfigService) {}
 
-  async chat(request: ChatCompletionRequest, modelConfig: any): Promise<ProviderResponse> {
-    this.logger.debug(`Calling Cloud API for provider ${modelConfig.provider} and model ${modelConfig.model}`);
-    
+  async chat(
+    request: ChatCompletionRequest,
+    modelConfig: any,
+  ): Promise<ProviderResponse> {
+    this.logger.debug(
+      `Calling Cloud API for provider ${modelConfig.provider} and model ${modelConfig.model}`,
+    );
+
     // Resolve base URL: custom base_url config -> provider defaults -> throw
     let baseUrl = modelConfig.base_url;
     if (!baseUrl) {
@@ -22,21 +27,35 @@ export class CloudProvider implements ModelProvider {
       } else if (modelConfig.provider === 'nvidia') {
         baseUrl = 'https://integrate.api.nvidia.com/v1';
       } else {
-        throw new Error(`Unsupported cloud provider without base_url: ${modelConfig.provider}`);
+        throw new Error(
+          `Unsupported cloud provider without base_url: ${modelConfig.provider}`,
+        );
       }
     }
 
     // Resolve API key
     let apiKey = '';
     if (modelConfig.api_key_env) {
-      apiKey = process.env[modelConfig.api_key_env] || this.configService.get<string>(modelConfig.api_key_env) || '';
+      apiKey =
+        process.env[modelConfig.api_key_env] ||
+        this.configService.get<string>(modelConfig.api_key_env) ||
+        '';
     } else {
       if (modelConfig.provider === 'openai') {
-        apiKey = this.configService.get<string>('openaiApiKey') || process.env.OPENAI_API_KEY || '';
+        apiKey =
+          this.configService.get<string>('openaiApiKey') ||
+          process.env.OPENAI_API_KEY ||
+          '';
       } else if (modelConfig.provider === 'anthropic') {
-        apiKey = this.configService.get<string>('anthropicApiKey') || process.env.ANTHROPIC_API_KEY || '';
+        apiKey =
+          this.configService.get<string>('anthropicApiKey') ||
+          process.env.ANTHROPIC_API_KEY ||
+          '';
       } else if (modelConfig.provider === 'nvidia') {
-        apiKey = this.configService.get<string>('NVIDIA_API_KEY') || process.env.NVIDIA_API_KEY || '';
+        apiKey =
+          this.configService.get<string>('NVIDIA_API_KEY') ||
+          process.env.NVIDIA_API_KEY ||
+          '';
       }
     }
 
@@ -53,10 +72,10 @@ export class CloudProvider implements ModelProvider {
       url = `${baseUrl.replace(/\/$/, '')}/messages`;
       headers['x-api-key'] = apiKey;
       headers['anthropic-version'] = '2023-06-01';
-      
+
       // Simple transform for MVP
-      const systemMsg = payload.messages.find(m => m.role === 'system');
-      const otherMsgs = payload.messages.filter(m => m.role !== 'system');
+      const systemMsg = payload.messages.find((m) => m.role === 'system');
+      const otherMsgs = payload.messages.filter((m) => m.role !== 'system');
       payload = {
         model: modelConfig.model,
         messages: otherMsgs,
@@ -64,7 +83,9 @@ export class CloudProvider implements ModelProvider {
         max_tokens: request.max_tokens || 1024,
       } as any;
       if (request.stream) (payload as any).stream = true;
-      this.logger.warn('Anthropic native streaming mapping is complex. Expecting simple responses or errors.');
+      this.logger.warn(
+        'Anthropic native streaming mapping is complex. Expecting simple responses or errors.',
+      );
     } else {
       // Default to OpenAI-compatible structure
       url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
@@ -89,7 +110,9 @@ export class CloudProvider implements ModelProvider {
 
     if (!response.ok) {
       const errorText = await response.text();
-      this.logger.error(`Cloud API Error from ${url}: ${response.status} ${errorText}`);
+      this.logger.error(
+        `Cloud API Error from ${url}: ${response.status} ${errorText}`,
+      );
       throw new Error(`Cloud API returned ${response.status}: ${errorText}`);
     }
 
