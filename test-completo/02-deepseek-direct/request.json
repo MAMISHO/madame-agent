@@ -1,0 +1,11 @@
+{
+  "model": "deepseek-ai/deepseek-v4-flash",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Analyze if these enterprise security requirements are compatible: 1) E2E encryption, 2) Admin can inspect any message, 3) No private keys outside device, 4) Message recovery after device loss."
+    }
+  ],
+  "max_tokens": 2048,
+  "temperature": 0.3
+}

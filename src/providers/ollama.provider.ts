@@ -9,6 +9,7 @@ export class OllamaProvider implements ModelProvider {
   async chat(
     request: ChatCompletionRequest,
     modelConfig: any,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
     this.logger.debug(`Calling Ollama API for model ${modelConfig.model}`);
 
@@ -28,6 +29,7 @@ export class OllamaProvider implements ModelProvider {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+      signal,
     });
 
     if (!response.ok) {

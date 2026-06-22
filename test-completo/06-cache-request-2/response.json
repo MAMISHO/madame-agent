@@ -1,0 +1,23 @@
+{
+  "id": "chatcmpl-107",
+  "object": "chat.completion",
+  "created": 1781105503,
+  "model": "gemma4:12b-mlx",
+  "system_fingerprint": "fp_ollama",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "4",
+        "reasoning": "The user wants to know the sum of 2 + 2.\nThe constraint is \"Respond only with the number.\"\n\nCalculation: 2 + 2 = 4.\nOutput format: Only the number."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 29,
+    "completion_tokens": 50,
+    "total_tokens": 79
+  }
+}

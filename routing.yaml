@@ -21,6 +21,19 @@ providers:
     provider: nvidia
     model: deepseek-ai/deepseek-v4-flash
     api_key_env: NVIDIA_API_KEY
+  cloud_google:
+    type: cloud
+    provider: google
+    model: models/gemini-3.1-flash-lite
+    api_key_env: GOOGLE_GENERATIVE_AI_API_KEY
+  local_gemma_oc:
+    type: ollama
+    model: gemma4:12b-mlx-oc
+    base_url: http://localhost:11434
+  local_qwen_oc:
+    type: ollama
+    model: qwen3.6:27b-oc
+    base_url: http://localhost:11434
 
 routing:
   plan:
@@ -47,6 +60,59 @@ model_pairs:
     name: "qwen3.6:27b+Llama70B"
     local: local_qwen
     cloud: cloud_nvidia
+  - id: qwen-deepseek-oc
+    name: "qwen3.6:27b-oc+DeepseekV4Flash"
+    local: local_qwen_oc
+    cloud: cloud_nvidia_deepseek
+  - id: gemma-deepseek-oc
+    name: "gemma4:12b-mlx-oc+DeepseekV4Flash"
+    local: local_gemma_oc
+    cloud: cloud_nvidia_deepseek
+  - id: qwen-gemini-oc
+    name: "qwen3.6:27b-oc+Gemini"
+    local: local_qwen_oc
+    cloud: cloud_google
+  - id: gemma-gemini-oc
+    name: "gemma4:12b-mlx-oc+Gemini"
+    local: local_gemma_oc
+    cloud: cloud_google
+
+translation:
+  enabled: false
+  model: gemma4:12b-mlx
+  base_url: http://localhost:11434
+  target_lang: en
+
+cache:
+  enabled: false
+  threshold: 0.92
+  max_entries: 500
+  embedding_model: nomic-embed-text:latest
+  embedding_base_url: http://localhost:11434
+
+tools:
+  enabled: true
+  max_iterations: 20
+  global_timeout_ms: 300000
+  sandbox:
+    workspace: /Users/mamisho/dev/madame-agent
+    denied_commands:
+      - rm
+      - sudo
+      - curl
+      - wget
+    max_timeout_ms: 30000
+    allow_network: false
+  builtin_tools:
+    - read_file
+    - write_file
+    - glob_files
+    - list_directory
+    - move_file
+    - copy_file
+    - execute_command
+    - create_directory
+    - delete_file
 
 confidence:
   threshold: 0.70

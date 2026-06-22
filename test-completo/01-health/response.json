@@ -1,0 +1,9 @@
+{
+  "status": "ok",
+  "uptime": 12,
+  "version": "0.0.1",
+  "providers": {
+    "local_small": "active"
+  },
+  "timestamp": "2026-06-10T15:27:02.663Z"
+}

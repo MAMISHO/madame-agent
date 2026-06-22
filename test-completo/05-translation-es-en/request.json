@@ -1,0 +1,11 @@
+{
+  "model": "gemma4:12b-mlx",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Analiza si estos requisitos de seguridad empresarial son compatibles: 1) Cifrado E2E, 2) Admin puede inspeccionar cualquier mensaje, 3) Claves privadas solo en el dispositivo, 4) Recuperación de mensajes tras pérdida del dispositivo."
+    }
+  ],
+  "max_tokens": 2048,
+  "temperature": 0.3
+}

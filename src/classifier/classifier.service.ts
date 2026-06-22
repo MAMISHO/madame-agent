@@ -36,12 +36,22 @@ export class ClassifierService implements OnModuleInit {
       return this.heuristicFallback(text);
     }
 
+    // MobileBERT has a 512-token limit; take the last ~1500 chars (the actual instruction)
+    // to avoid classifying code/file dumps at the beginning of the message
+    const MAX_CHARS = 1500;
+    const truncated = text.length > MAX_CHARS
+      ? '...[truncated] ' + text.slice(-MAX_CHARS)
+      : text;
+
     try {
       const labels = [
         'system planning and architecture',
         'code execution and simple fix',
       ];
-      const output = await this.classifier(text, labels);
+      const output = await this.classifier(truncated, labels, {
+        max_length: 512,
+        truncation: true,
+      });
 
       this.logger.debug(`Classification results: ${JSON.stringify(output)}`);
 

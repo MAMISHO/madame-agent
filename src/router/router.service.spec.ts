@@ -10,6 +10,9 @@ import {
   ModelProvider,
   ProviderResponse,
 } from '../providers/provider.interface';
+import { CacheService } from '../cache/cache.service';
+import { TranslationService } from '../translation/translation.service';
+import { ToolLoopService } from '../tools/tool-loop.service';
 
 describe('RouterService', () => {
   let routerService: RouterService;
@@ -122,6 +125,25 @@ describe('RouterService', () => {
                   removedTokens: 0,
                 },
               })),
+          },
+        },
+        {
+          provide: CacheService,
+          useValue: {
+            findSimilar: jest.fn().mockResolvedValue(null),
+            store: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: TranslationService,
+          useValue: {
+            isEnabled: jest.fn().mockReturnValue(false),
+          },
+        },
+        {
+          provide: ToolLoopService,
+          useValue: {
+            execute: jest.fn(),
           },
         },
       ],

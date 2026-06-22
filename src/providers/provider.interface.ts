@@ -9,5 +9,6 @@ export interface ModelProvider {
   chat(
     request: ChatCompletionRequest,
     modelConfig: any,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse>;
 }
