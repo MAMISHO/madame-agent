@@ -1,0 +1,26 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Para llevar a cabo esta tarea de organización en el proyecto `madame-agent`, he diseñado el siguiente plan de ejecución. El objetivo es limpiar la estructura del proyecto y dotar de trazabilidad a las pruebas realizadas.\n\n### Plan de Acción\n\n#### Fase 1: Análisis y Auditoría\n1.  **Escaneo del directorio raíz:** Identificar todos los scripts de prueba (probablemente con extensiones `.sh`, `.py`, `.js`, etc.) y los directorios de resultados generados (usualmente con nombres como `results`, `output`, `test_run_...`).\n2.  **Mapeo de relación:** Determinar qué directorio de resultados pertenece a qué script de prueba mediante la inspección de fechas de creación/modificación y, si es posible, el contenido de los logs dentro de los directorios.\n3.  **Inventario:** Crear una lista de los elementos encontrados para asegurar que no se pierda ninguna información crítica.\n\n#### Fase 2: Preparación del Entorno\n1.  **Creación de la estructura:** Crear el directorio raíz `custom-test`.\n2.  **Definición de nomenclatura:** Establecer un estándar de nombrado para los subdirectorios, por ejemplo:\n    *   `01_nombre-de-la-prueba/`\n    *   `02_nombre-de-la-prueba/`\n    *   Dentro de cada uno: `script_ejecucion.ext` y `resultados/`.\n\n#### Fase 3: Ejecución de la Migración\n1.  **Movimiento de archivos:**\n    *   Mover los scripts identificados a sus respectivos subdirectorios dentro de `custom-test`.\n    *   Mover los directorios de resultados correspondientes a cada subdirectorio.\n2.  **Renombrado:** Aplicar la nomenclatura secuencial definida en la Fase 2 para garantizar que el orden sea lógico y fácil de seguir.\n3.  **Verificación de rutas:** Si los scripts contienen rutas relativas (ej. `cd ./results`), actualizar los scripts para que apunten correctamente a la nueva ubicación dentro de `custom-test` (o hacerlos agnósticos a la ruta).\n\n#### Fase 4: Validación y Limpieza\n1.  **Verificación de integridad:** Comprobar que todos los scripts siguen siendo ejecutables y que los directorios de resultados mantienen su estructura interna.\n2.  **Documentación (Opcional):** Crear un pequeño archivo `README.md` dentro de `custom-test` que explique la relación entre los scripts y los resultados para futuras consultas.\n3.  **Limpieza final:** Eliminar cualquier archivo temporal o rastro de las pruebas que haya quedado fuera de la nueva estructura.\n\n---\n\n### Requerimiento de información adicional\nPara proceder con la ejecución técnica, necesito que me confirmes lo siguiente:\n\n1.  **¿Deseas que ejecute comandos de terminal (si tengo acceso al sistema de archivos) o prefieres que te proporcione el script de shell para que tú lo ejecutes?**\n2.  **¿Existe algún patrón de nombres actual que deba respetar o prefieres que yo asigne los nombres secuenciales basados en el contenido?**\n3.  **¿Hay algún script que deba quedar fuera de esta organización (por ser parte del core del agente y no una prueba)?**\n\n**Quedo a la espera de tu confirmación para comenzar con la Fase 1.**",
+        "extra_content": {
+          "google": {
+            "thought_signature": "EjQKMgEMOdbHeHnG5o4pYJ8we0dihqxZ6vgY65b3JjfdAjo9nkO9ZxKXMbn045pJNbOQhcfP"
+          }
+        },
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1782091170,
+  "id": "no04asWiGc2AkdUP6vq_6Qk",
+  "model": "models/gemini-3.1-flash-lite",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 733,
+    "prompt_tokens": 178,
+    "total_tokens": 911
+  }
+}

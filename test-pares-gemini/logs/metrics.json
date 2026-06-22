@@ -1,0 +1,30 @@
+{
+  "uptime": 193,
+  "requests": {
+    "total": 6,
+    "byProvider": {
+      "local_gemma_oc": 2,
+      "cloud_google": 2,
+      "local_qwen_oc": 2
+    },
+    "byMode": {
+      "direct": 2,
+      "classifier": 4
+    }
+  },
+  "escalations": {
+    "total": 2,
+    "rate": 0.3333333333333333
+  },
+  "tokens": {
+    "inputTotal": 1078,
+    "savedByContext": 0
+  },
+  "latency": {
+    "avgMs": 28995
+  },
+  "errors": {
+    "total": 0,
+    "byProvider": {}
+  }
+}

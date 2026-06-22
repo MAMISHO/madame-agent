@@ -1,0 +1,26 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Para llevar a cabo esta tarea de organización en el proyecto `/Users/mamisho/dev/madame-agent`, he diseñado el siguiente plan de acción. El objetivo es limpiar la estructura del proyecto y dotar de trazabilidad a las pruebas realizadas.\n\n### Plan de Acción: Organización de `custom-test`\n\n#### Fase 1: Análisis y Auditoría (Exploración)\n1.  **Listado de archivos:** Ejecutar un escaneo en el directorio raíz para identificar:\n    *   Scripts de prueba (ej. archivos `.py`, `.sh`, `.js` que parezcan ser de testeo).\n    *   Directorios de resultados (ej. carpetas con nombres como `output`, `results`, `logs`, o fechas).\n2.  **Mapeo de relaciones:** Determinar qué script generó qué directorio de resultados basándome en la fecha de creación/modificación y el contenido de los archivos.\n3.  **Inventario:** Crear una lista de mapeo (Script -> Directorio de resultados) para asegurar que no se pierda información durante el movimiento.\n\n#### Fase 2: Preparación del Entorno\n1.  **Creación de estructura:** Crear el directorio raíz `custom-test` en la raíz del proyecto.\n2.  **Definición de nomenclatura:** Establecer un estándar de nombrado para los subdirectorios, por ejemplo:\n    *   `001_nombre-descriptivo-prueba`\n    *   `002_nombre-descriptivo-prueba`\n    *   *(Esto permitirá mantener el orden cronológico o lógico de ejecución).*\n\n#### Fase 3: Ejecución de la Migración\n1.  **Creación de subdirectorios:** Por cada set de prueba identificado, crear la carpeta correspondiente dentro de `custom-test`.\n2.  **Movimiento de archivos:**\n    *   Mover el script original al subdirectorio.\n    *   Mover el directorio de resultados asociado al mismo subdirectorio.\n3.  **Renombrado:** Aplicar el formato secuencial definido en la Fase 2 a los directorios de resultados para que coincidan con el contexto del script.\n\n#### Fase 4: Verificación y Limpieza\n1.  **Validación de rutas:** Actualizar (si es necesario) las rutas internas de los scripts si estos hacen referencia a los directorios de resultados mediante rutas relativas, para asegurar que sigan funcionando tras el movimiento.\n2.  **Limpieza:** Eliminar archivos temporales o directorios vacíos que hayan quedado en la raíz tras la migración.\n3.  **Documentación (Opcional pero recomendado):** Crear un pequeño archivo `README.md` dentro de `custom-test` que explique la estructura y el propósito de cada set de pruebas.\n\n---\n\n### ¿Cómo proceder?\n\nPara comenzar, **necesito que me proporciones un listado de los archivos y directorios actuales** en la raíz del proyecto (o los que consideres candidatos a ser movidos). Puedes ejecutar el siguiente comando en tu terminal y pegarme el resultado:\n\n```bash\nls -F\n```\n\nUna vez tenga esa información, podré decirte exactamente qué comandos ejecutar para realizar la migración de forma segura. **¿Deseas que proceda con el análisis de los archivos actuales?**",
+        "extra_content": {
+          "google": {
+            "thought_signature": "EjQKMgEMOdbHj+0c0B0ZX1Y/iqDnEVwH3b4n7lWIXExdEM4Ipk91RDIbtun4VJK62+ywcWkr"
+          }
+        },
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1782091139,
+  "id": "eI04auvEIerskdUPg5aQoAk",
+  "model": "models/gemini-3.1-flash-lite",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 707,
+    "prompt_tokens": 178,
+    "total_tokens": 885
+  }
+}

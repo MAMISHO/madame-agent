@@ -228,20 +228,23 @@ export class RouterService {
       throw new Error(`Cloud provider "${pair.cloud}" not found for pair "${pair.name}"`);
     }
 
+    // Detect OpenCode mode from system prompt — this takes priority over classifier
+    const systemMode = this.detectMode(request.messages);
+
     // Run classifier on the last user message only (not the system prompt)
     const userInput = this.lastUserMessage(request.messages);
     const classification = await this.classifierService.classifyTask(userInput);
     const decision = this.confidenceEngine.evaluate(classification);
 
-    // Escalate if the task requires planning (needs powerful cloud model)
-    // OR if confidence is below threshold (unsure about classification)
-    const shouldEscalate = classification.mode === 'plan' || decision.shouldEscalate;
+    // Only "plan" mode forces escalation — OpenCode is planning and needs the smartest model.
+    // "Build" mode falls back to the classifier: if it detects a complex task, escalate.
+    const shouldEscalate = systemMode === 'plan' ? true : classification.mode === 'plan' || decision.shouldEscalate;
     const selectedConfig = shouldEscalate ? cloudConfig : localConfig;
     const providerKey = shouldEscalate ? pair.cloud : pair.local;
     const providerType = selectedConfig.type;
 
     this.logger.log(
-      `Pair "${pair.name}": mode=${classification.mode}, confidence=${classification.confidence.toFixed(3)}` +
+      `Pair "${pair.name}": systemMode=${systemMode}, mode=${classification.mode}, confidence=${classification.confidence.toFixed(3)}` +
         (shouldEscalate
           ? ` → ESCALATING to ${pair.cloud} (${selectedConfig.model})`
           : ` → using local ${pair.local} (${selectedConfig.model})`),
@@ -336,6 +339,20 @@ export class RouterService {
       }
     }
     return '';
+  }
+
+  private detectMode(messages: any[]): 'plan' | 'build' | null {
+    const systemMsg = messages.find(m => m.role === 'system');
+    if (!systemMsg || typeof systemMsg.content !== 'string') return null;
+
+    const content = systemMsg.content.toLowerCase();
+    if (content.includes('modo de planificación') || content.includes('planning mode') || content.includes('plan mode')) {
+      return 'plan';
+    }
+    if (content.includes('modo de desarrollo activo') || content.includes('active development mode') || content.includes('build mode')) {
+      return 'build';
+    }
+    return null;
   }
 
   private estimateTokens(messages: any[]): number {
