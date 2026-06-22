@@ -115,4 +115,4 @@ tools:
     - delete_file
 
 confidence:
-  threshold: 0.70
+  threshold: 0.40
