@@ -13,6 +13,8 @@ import {
 import { CacheService } from '../cache/cache.service';
 import { TranslationService } from '../translation/translation.service';
 import { ToolLoopService } from '../tools/tool-loop.service';
+import { ToolRegistryService } from '../tools/tool-registry.service';
+import { ObservabilityService } from '../observability/observability.service';
 
 describe('RouterService', () => {
   let routerService: RouterService;
@@ -20,6 +22,7 @@ describe('RouterService', () => {
   let providersService: ProvidersService;
   let classifierService: ClassifierService;
   let mockProvider: ModelProvider;
+  let moduleRef: TestingModule;
 
   const mockProvidersConfig = {
     local_small: {
@@ -143,16 +146,40 @@ describe('RouterService', () => {
         {
           provide: ToolLoopService,
           useValue: {
-            execute: jest.fn(),
+            execute: jest.fn().mockResolvedValue({
+              response: { data: { choices: [{ message: { content: 'test response' } }] } },
+              toolCalls: [],
+            }),
+          },
+        },
+        {
+          provide: ToolRegistryService,
+          useValue: {
+            register: jest.fn(),
+            getDefinitions: jest.fn().mockReturnValue([]),
+            get: jest.fn(),
+          },
+        },
+        {
+          provide: ObservabilityService,
+          useValue: {
+            startTimer: jest.fn(),
+            finishTimer: jest.fn(),
+            trackRequest: jest.fn(),
+            registerSubagentTask: jest.fn(),
+            updateSubagentTaskStatus: jest.fn(),
+            getActiveSubagentTasks: jest.fn().mockReturnValue([]),
           },
         },
       ],
     }).compile();
 
+    moduleRef = module;
     routerService = module.get<RouterService>(RouterService);
     configService = module.get<ConfigService>(ConfigService);
     providersService = module.get<ProvidersService>(ProvidersService);
     classifierService = module.get<ClassifierService>(ClassifierService);
+    routerService.onModuleInit();
   });
 
   describe('direct routing', () => {
@@ -327,6 +354,86 @@ describe('RouterService', () => {
       const result = await routerService.route(request);
 
       expect(result.response.stream).toBeDefined();
+    });
+  });
+
+  describe('orchestrator pairs and delegation', () => {
+    const mockOrchestratorPairs = [
+      {
+        id: 'llama-gemma-orchestrator',
+        name: 'Llama70B-Orchestrator+Gemma12B',
+        orchestrator: 'cloud_nvidia',
+        subagents: ['local_medium', 'local_small'],
+      },
+    ];
+
+    beforeEach(() => {
+      jest.spyOn(configService, 'get').mockImplementation((key: string) => {
+        if (key === 'providers') return mockProvidersConfig;
+        if (key === 'routing') return mockRoutingConfig;
+        if (key === 'confidence') return mockConfidenceConfig;
+        if (key === 'orchestrator_pairs') return mockOrchestratorPairs;
+        return undefined;
+      });
+    });
+
+    it('routes orchestrator pair to the orchestrator model and injects delegate_subagent tool', async () => {
+      const request: ChatCompletionRequest = {
+        model: 'llama-gemma-orchestrator',
+        messages: [{ role: 'user', content: 'delegate this job' }],
+      };
+
+      const result = await routerService.route(request);
+
+      expect(moduleRef.get(ToolLoopService).execute).toHaveBeenCalledWith(
+        request,
+        expect.objectContaining({ type: 'cloud', model: 'meta/llama-3.3-70b-instruct' })
+      );
+      expect(request.tools).toBeDefined();
+      expect(request.tools!.some((t) => t.function.name === 'delegate_subagent')).toBe(true);
+      expect(result.metadata.mode).toBe('orchestrator');
+    });
+
+    it('executes delegate_subagent execution callback with failover and self-fallback', async () => {
+      const registerSpy = moduleRef.get(ToolRegistryService).register as jest.Mock;
+      const delegationTool = registerSpy.mock.calls.find(
+        (call) => call[0].definition.function.name === 'delegate_subagent',
+      )?.[0];
+
+      expect(delegationTool).toBeDefined();
+
+      const routeSpy = jest.spyOn(routerService, 'route');
+      routeSpy.mockImplementation(async (req: ChatCompletionRequest) => {
+        if (req.model === 'local_medium') {
+          throw new Error('Local medium offline');
+        }
+        if (req.model === 'local_small') {
+          return {
+            response: {
+              data: {
+                choices: [{ message: { role: 'assistant', content: 'resolved by small' } }],
+              },
+            },
+            metadata: {} as any,
+          };
+        }
+        return {
+          response: {
+            data: { choices: [{ message: { role: 'assistant', content: 'orchestrator response' } }] },
+          },
+          metadata: {} as any,
+        };
+      });
+
+      const executeResult = await delegationTool.execute(
+        { task: 'do cleanup' },
+        { request: { model: 'llama-gemma-orchestrator' } },
+      );
+
+      expect(executeResult.status).toBe('success');
+      expect(executeResult.result).toBe('resolved by small');
+      expect(routeSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'local_medium' }));
+      expect(routeSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'local_small' }));
     });
   });
 });

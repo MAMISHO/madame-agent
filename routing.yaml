@@ -42,6 +42,25 @@ routing:
     provider: local_medium
   escalation:
     provider: cloud_nvidia
+  subagent:
+    providers:
+      - local_medium
+      - local_qwen
+
+orchestrator_pairs:
+  - id: llama-gemma-orchestrator
+    name: "Llama70B-Orchestrator+Gemma12B"
+    orchestrator: cloud_nvidia
+    subagents:
+      - local_medium
+      - local_qwen
+  - id: deepseek-hybrid-orchestrator
+    name: "DeepseekFlash-Orchestrator+Gemma4DeepseekHybrid"
+    orchestrator: cloud_nvidia_deepseek
+    subagents:
+      - gemma4-deepseek
+      - local_medium
+
 
 model_pairs:
   - id: gemma4-deepseek

@@ -3,7 +3,7 @@ import { ToolDefinition } from '../proxy/dto/openai.dto';
 
 export interface ToolHandler {
   definition: ToolDefinition;
-  execute: (args: any) => Promise<any>;
+  execute: (args: any, context?: { parentRequestId?: string; parentSignal?: AbortSignal }) => Promise<any>;
   timeout?: number;
 }
 

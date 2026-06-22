@@ -2,13 +2,24 @@ import { Injectable, Logger } from '@nestjs/common';
 
 export interface RoutingInfo {
   requestId: string;
-  mode: 'direct' | 'classifier';
+  mode: 'direct' | 'classifier' | 'orchestrator';
   classifierMode?: 'plan' | 'execution';
   confidence?: number;
   escalated: boolean;
   providerKey: string;
   providerType: string;
   model: string;
+  parentRequestId?: string;
+}
+
+export interface ActiveSubagentTask {
+  requestId: string;
+  parentRequestId: string;
+  subagentModel: string;
+  taskDescription: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  startedAt: Date;
+  abortController: AbortController;
 }
 
 export interface RequestMetrics {
@@ -62,6 +73,7 @@ export class ObservabilityService {
   private readonly maxStored = 1000;
   private requests: RequestMetrics[] = [];
   private timers = new Map<string, number>();
+  private activeSubagents: Map<string, ActiveSubagentTask> = new Map();
 
   startTimer(requestId: string): void {
     this.timers.set(requestId, Date.now());
@@ -162,5 +174,38 @@ export class ObservabilityService {
 
   getRecentRequests(limit = 10): RequestMetrics[] {
     return this.requests.slice(-limit);
+  }
+
+  registerSubagentTask(task: ActiveSubagentTask): void {
+    this.activeSubagents.set(task.requestId, task);
+    this.logger.log(`Subagent task registered: ${task.requestId} (parent: ${task.parentRequestId})`);
+  }
+
+  updateSubagentTaskStatus(requestId: string, status: 'completed' | 'failed' | 'cancelled'): void {
+    const task = this.activeSubagents.get(requestId);
+    if (task) {
+      task.status = status;
+      this.logger.log(`Subagent task ${requestId} status updated to: ${status}`);
+    }
+  }
+
+  getActiveSubagentTasks(): Omit<ActiveSubagentTask, 'abortController'>[] {
+    return Array.from(this.activeSubagents.values())
+      .filter((t) => t.status === 'running')
+      .map(({ abortController, ...rest }) => rest);
+  }
+
+  cancelSubagentsForParent(parentRequestId: string): void {
+    let cancelCount = 0;
+    for (const task of this.activeSubagents.values()) {
+      if (task.parentRequestId === parentRequestId && task.status === 'running') {
+        task.abortController.abort();
+        task.status = 'cancelled';
+        cancelCount++;
+      }
+    }
+    if (cancelCount > 0) {
+      this.logger.log(`Cancelled ${cancelCount} active subagent tasks for parent request: ${parentRequestId}`);
+    }
   }
 }

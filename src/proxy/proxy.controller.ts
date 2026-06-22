@@ -21,6 +21,7 @@ export class ProxyController {
   getModels() {
     const providersConfig = this.configService.get('providers') || {};
     const modelPairs = this.configService.get('model_pairs') || [];
+    const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
 
     // Individual models from providers (only local ones + NVIDIA for direct access)
     const modelsList = Object.values(providersConfig).map((config: any) => ({
@@ -34,18 +35,52 @@ export class ProxyController {
       new Map(modelsList.map((item) => [item.id, item])).values(),
     );
 
-    // Composite model pairs
-    const pairModels = modelPairs.map((pair: any) => ({
-      id: pair.name,
-      object: 'model',
-      created: Math.floor(Date.now() / 1000),
-      owned_by: 'madame-agent',
-    }));
+    // Composite model pairs (exposing both id and name for flexibility)
+    const pairModels = modelPairs.flatMap((pair: any) => [
+      {
+        id: pair.id,
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'madame-agent',
+      },
+      {
+        id: pair.name,
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'madame-agent',
+      }
+    ]);
+
+    // Orchestrator pairs (exposing both id and name)
+    const orchestratorModels = orchestratorPairs.flatMap((pair: any) => [
+      {
+        id: pair.id,
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'madame-agent',
+      },
+      {
+        id: pair.name,
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'madame-agent',
+      }
+    ]);
+
+    const allModels = [...pairModels, ...orchestratorModels, ...uniqueModels];
+    const uniqueAllModels = Array.from(
+      new Map(allModels.map((item) => [item.id, item])).values(),
+    );
 
     return {
       object: 'list',
-      data: [...pairModels, ...uniqueModels],
+      data: uniqueAllModels,
     };
+  }
+
+  @Get('subagents/active')
+  getActiveSubagents() {
+    return this.observability.getActiveSubagentTasks();
   }
 
   @Get('health')
@@ -65,7 +100,14 @@ export class ProxyController {
     @Res() res: Response,
   ) {
     const requestId = `req_${++requestCounter}`;
+    body.requestId = requestId;
     this.observability.startTimer(requestId);
+
+    const abortHandler = () => {
+      this.logger.log(`Client connection closed for ${requestId}. Cancelling active subagents.`);
+      this.observability.cancelSubagentsForParent(requestId);
+    };
+    req.on('close', abortHandler);
 
     try {
       const { response, metadata } =
@@ -151,6 +193,8 @@ export class ProxyController {
                 : 'proxy_error',
         },
       });
+    } finally {
+      req.off('close', abortHandler);
     }
   }
 }

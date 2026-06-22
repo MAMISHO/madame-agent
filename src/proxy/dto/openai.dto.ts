@@ -49,4 +49,6 @@ export class ChatCompletionRequest {
   tools?: ToolDefinition[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function: { name: string } };
   response_format?: any;
+  requestId?: string;
+  parentRequestId?: string;
 }
