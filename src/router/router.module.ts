@@ -7,9 +7,19 @@ import { ContextModule } from '../context/context.module';
 import { CacheModule } from '../cache/cache.module';
 import { TranslationModule } from '../translation/translation.module';
 import { ToolsModule } from '../tools/tools.module';
+import { ObservabilityModule } from '../observability/observability.module';
 
 @Module({
-  imports: [ProvidersModule, ClassifierModule, ConfidenceModule, ContextModule, CacheModule, TranslationModule, ToolsModule],
+  imports: [
+    ProvidersModule,
+    ClassifierModule,
+    ConfidenceModule,
+    ContextModule,
+    CacheModule,
+    TranslationModule,
+    ToolsModule,
+    ObservabilityModule,
+  ],
   providers: [RouterService],
   exports: [RouterService],
 })

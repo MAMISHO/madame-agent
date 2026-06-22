@@ -66,6 +66,11 @@ export class ToolLoopService {
       // Create AbortController for preemptive timeout on this iteration
       const abortController = new AbortController();
       const abortTimeout = setTimeout(() => abortController.abort(), remaining);
+      const requestSignal = (request as any).signal;
+      const requestAbortHandler = () => abortController.abort();
+      if (requestSignal) {
+        requestSignal.addEventListener('abort', requestAbortHandler);
+      }
 
       let response: ProviderResponse;
       try {
@@ -76,6 +81,9 @@ export class ToolLoopService {
         );
       } catch (err: any) {
         clearTimeout(abortTimeout);
+        if (requestSignal) {
+          requestSignal.removeEventListener('abort', requestAbortHandler);
+        }
         if (err.name === 'AbortError') {
           const abortMsg = `Provider call aborted after ${elapsed}ms (timeout ${this.globalTimeoutMs}ms)`;
           errors.push(abortMsg);
@@ -86,6 +94,9 @@ export class ToolLoopService {
         throw err;
       } finally {
         clearTimeout(abortTimeout);
+        if (requestSignal) {
+          requestSignal.removeEventListener('abort', requestAbortHandler);
+        }
       }
 
       const toolCalls: ToolCall[] | undefined = response.data?.choices?.[0]?.message?.tool_calls;
@@ -138,7 +149,10 @@ export class ToolLoopService {
           this.logger.log(`Tool executing '${toolName}' (iteration ${i + 1})`);
           this.logger.debug(`Tool args for '${toolName}': ${JSON.stringify(args).slice(0, 500)}`);
 
-          const result = await this.executeSingleToolCall(toolCall);
+          const result = await this.executeSingleToolCall(toolCall, {
+            parentRequestId: request.requestId,
+            parentSignal: abortController.signal,
+          });
           const latencyMs = Date.now() - toolStart;
 
           // Cache the result (FIFO eviction at MAX_CACHE_ENTRIES)
@@ -214,7 +228,10 @@ export class ToolLoopService {
     }
   }
 
-  private async executeSingleToolCall(toolCall: ToolCall): Promise<any> {
+  private async executeSingleToolCall(
+    toolCall: ToolCall,
+    context?: { parentRequestId?: string; parentSignal?: AbortSignal },
+  ): Promise<any> {
     const toolName = toolCall.function.name;
     const tool = this.toolRegistry.get(toolName);
 
@@ -225,7 +242,7 @@ export class ToolLoopService {
     const args = this.parseArgs(toolCall);
 
     this.sandbox.check(toolName, args);
-    const result = await tool.execute(args);
+    const result = await tool.execute(args, context);
     return result;
   }
 

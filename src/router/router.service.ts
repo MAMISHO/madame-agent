@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ChatCompletionRequest, ToolCallRecord } from '../proxy/dto/openai.dto';
 import { ProvidersService } from '../providers/providers.service';
@@ -9,9 +9,12 @@ import { ContextService } from '../context/context.service';
 import { CacheService } from '../cache/cache.service';
 import { TranslationService } from '../translation/translation.service';
 import { ToolLoopService } from '../tools/tool-loop.service';
+import { ToolRegistryService } from '../tools/tool-registry.service';
+import { ObservabilityService } from '../observability/observability.service';
+import { randomUUID } from 'crypto';
 
 export interface RouteMetadata {
-  mode: 'direct' | 'classifier';
+  mode: 'direct' | 'classifier' | 'orchestrator';
   classifierMode?: 'plan' | 'execution';
   confidence?: number;
   escalated: boolean;
@@ -29,7 +32,7 @@ export interface RouteResult {
 }
 
 @Injectable()
-export class RouterService {
+export class RouterService implements OnModuleInit {
   private readonly logger = new Logger(RouterService.name);
 
   constructor(
@@ -41,15 +44,191 @@ export class RouterService {
     private cacheService: CacheService,
     private translationService: TranslationService,
     private toolLoopService: ToolLoopService,
+    private toolRegistry: ToolRegistryService,
+    private observability: ObservabilityService,
   ) {}
 
+  onModuleInit() {
+    this.toolRegistry.register({
+      definition: this.getDelegationToolDefinition(),
+      execute: async (args: { task: string; subagent_model?: string }, context?: { parentRequestId?: string; parentSignal?: AbortSignal }) => {
+        const parentRequestId = context?.parentRequestId || 'unknown';
+        const parentSignal = context?.parentSignal;
+
+        let subagentsToTry: string[] = [];
+
+        if (args.subagent_model) {
+          subagentsToTry = [args.subagent_model];
+        } else {
+          // Resolve subagents from active orchestrator pair if possible
+          const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
+          const requestModel = context && (context as any).request?.model;
+          const pair = requestModel ? this.findOrchestratorPair(requestModel, orchestratorPairs) : null;
+          if (pair && pair.subagents) {
+            subagentsToTry = [...pair.subagents];
+          } else {
+            // Fallback to global subagent providers
+            subagentsToTry = this.configService.get('routing.subagent.providers') || ['local_medium'];
+          }
+        }
+
+        this.logger.log(`delegate_subagent: Task will be tried on subagents: ${subagentsToTry.join(', ')}`);
+
+        let finalResultContent: string | null = null;
+        let lastError: Error | null = null;
+
+        for (const subagentModel of subagentsToTry) {
+          if (parentSignal?.aborted) {
+            this.logger.warn(`Subagent execution skipped (parent request aborted)`);
+            throw new Error('Parent request aborted');
+          }
+
+          const subagentRequestId = `sub_${randomUUID().slice(0, 8)}`;
+          const subagentAbortController = new AbortController();
+
+          const abortHandler = () => {
+            subagentAbortController.abort();
+          };
+          if (parentSignal) {
+            parentSignal.addEventListener('abort', abortHandler);
+          }
+
+          this.observability.registerSubagentTask({
+            requestId: subagentRequestId,
+            parentRequestId,
+            subagentModel,
+            taskDescription: args.task,
+            status: 'running',
+            startedAt: new Date(),
+            abortController: subagentAbortController,
+          });
+
+          try {
+            const subagentRequest: ChatCompletionRequest = {
+              model: subagentModel,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a helpful local sub-agent. You have access to filesystem tools and command execution to solve the task. Perform the requested task directly and output the final result.'
+                },
+                {
+                  role: 'user',
+                  content: args.task
+                }
+              ],
+              tools: this.toolRegistry.getDefinitions().filter(t => t.function.name !== 'delegate_subagent'),
+              requestId: subagentRequestId,
+              parentRequestId,
+            };
+            (subagentRequest as any).signal = subagentAbortController.signal;
+
+            const routeResult = await this.route(subagentRequest);
+            finalResultContent = routeResult.response.data?.choices?.[0]?.message?.content || 'No response from subagent';
+            this.observability.updateSubagentTaskStatus(subagentRequestId, 'completed');
+            if (parentSignal) {
+              parentSignal.removeEventListener('abort', abortHandler);
+            }
+            break;
+          } catch (err: any) {
+            this.logger.warn(`Subagent ${subagentModel} failed for task: ${err.message}`);
+            lastError = err;
+            this.observability.updateSubagentTaskStatus(subagentRequestId, 'failed');
+            if (parentSignal) {
+              parentSignal.removeEventListener('abort', abortHandler);
+            }
+          }
+        }
+
+        // Self-fallback
+        if (finalResultContent === null) {
+          this.logger.warn(`All configured subagents failed. Falling back to isolated self-assignment on orchestrator.`);
+          
+          const requestModel = context && (context as any).request?.model;
+          const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
+          const pair = requestModel ? this.findOrchestratorPair(requestModel, orchestratorPairs) : null;
+          const orchestratorModelKey = pair ? pair.orchestrator : (requestModel || 'cloud_nvidia');
+          
+          const selfRequestId = `self_${randomUUID().slice(0, 8)}`;
+          const selfAbortController = new AbortController();
+
+          const abortHandler = () => {
+            selfAbortController.abort();
+          };
+          if (parentSignal) {
+            parentSignal.addEventListener('abort', abortHandler);
+          }
+
+          this.observability.registerSubagentTask({
+            requestId: selfRequestId,
+            parentRequestId,
+            subagentModel: orchestratorModelKey,
+            taskDescription: `[Self-fallback] ${args.task}`,
+            status: 'running',
+            startedAt: new Date(),
+            abortController: selfAbortController,
+          });
+
+          try {
+            const selfRequest: ChatCompletionRequest = {
+              model: orchestratorModelKey,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are the orchestrator model running in isolated self-fallback. Solve the task directly.'
+                },
+                {
+                  role: 'user',
+                  content: args.task
+                }
+              ],
+              tools: this.toolRegistry.getDefinitions().filter(t => t.function.name !== 'delegate_subagent'),
+              requestId: selfRequestId,
+              parentRequestId,
+            };
+            (selfRequest as any).signal = selfAbortController.signal;
+
+            const routeResult = await this.route(selfRequest);
+            finalResultContent = routeResult.response.data?.choices?.[0]?.message?.content || 'No response from self-fallback';
+            this.observability.updateSubagentTaskStatus(selfRequestId, 'completed');
+            if (parentSignal) {
+              parentSignal.removeEventListener('abort', abortHandler);
+            }
+          } catch (err: any) {
+            this.logger.error(`Self-fallback on orchestrator failed: ${err.message}`);
+            this.observability.updateSubagentTaskStatus(selfRequestId, 'failed');
+            if (parentSignal) {
+              parentSignal.removeEventListener('abort', abortHandler);
+            }
+            throw new Error(`All subagents failed (last error: ${lastError?.message || 'unknown'}) and self-fallback failed: ${err.message}`);
+          }
+        }
+
+        return {
+          status: 'success',
+          result: finalResultContent
+        };
+      }
+    });
+  }
+
   async route(request: ChatCompletionRequest): Promise<RouteResult> {
+    request.requestId = request.requestId || `req_${randomUUID().slice(0, 8)}`;
+
     if (this.translationService.isEnabled()) {
       request.messages = await this.translationService.translateMessages(request.messages);
     }
 
     const providersConfig = this.configService.get('providers') || {};
     const modelPairs = this.configService.get('model_pairs') || [];
+    const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
+
+    // 0. Orchestrator routing: if model matches a named orchestrator pair
+    if (request.model) {
+      const orchestratorPair = this.findOrchestratorPair(request.model, orchestratorPairs);
+      if (orchestratorPair) {
+        return this.routeThroughOrchestrator(request, providersConfig, orchestratorPair);
+      }
+    }
 
     // 1. Composite pair routing: if model matches a named pair, use local + optional escalation
     if (request.model) {
@@ -385,6 +564,113 @@ export class RouterService {
       }
     }
     return null;
+  }
+
+  private findOrchestratorPair(
+    modelName: string,
+    orchestratorPairs: any[],
+  ): { id: string; name: string; orchestrator: string; subagents: string[] } | null {
+    for (const pair of orchestratorPairs) {
+      if (pair.name === modelName || pair.id === modelName) {
+        return pair;
+      }
+    }
+    return null;
+  }
+
+  private getDelegationToolDefinition() {
+    return {
+      type: 'function' as const,
+      function: {
+        name: 'delegate_subagent',
+        description: 'Delegates a specific sub-task or task to a local sub-agent. The sub-agent has access to filesystem tools and can run commands to solve the task, returning only the final result.',
+        parameters: {
+          type: 'object',
+          properties: {
+            task: {
+              type: 'string',
+              description: 'The detailed instructions/task for the subagent to perform.'
+            },
+            subagent_model: {
+              type: 'string',
+              description: 'Optional model name or pair name to use for the subagent. If not specified, the default subagents will be tried in order.'
+            }
+          },
+          required: ['task']
+        }
+      }
+    };
+  }
+
+  private async routeThroughOrchestrator(
+    request: ChatCompletionRequest,
+    providersConfig: Record<string, any>,
+    pair: { id: string; name: string; orchestrator: string; subagents: string[] },
+  ): Promise<RouteResult> {
+    const orchestratorConfig = providersConfig[pair.orchestrator];
+    if (!orchestratorConfig) {
+      throw new Error(`Orchestrator provider "${pair.orchestrator}" not found for pair "${pair.name}"`);
+    }
+
+    if (!request.tools) {
+      request.tools = [];
+    }
+    const hasTool = request.tools.some((t) => t.function.name === 'delegate_subagent');
+    if (!hasTool) {
+      request.tools.push(this.getDelegationToolDefinition());
+    }
+
+    this.logger.log(
+      `Orchestrator pair "${pair.name}": using orchestrator ${pair.orchestrator} (${orchestratorConfig.model})`,
+    );
+
+    const originalTokens = this.estimateTokens(request.messages);
+    const processed = this.contextService.process(request.messages, {
+      maxTokens: this.resolveContextLimit(orchestratorConfig),
+    });
+    request.messages = processed.messages;
+
+    const cacheInput = JSON.stringify(request.messages);
+    const cached = await this.cacheService.findSimilar(cacheInput);
+    if (cached) {
+      return {
+        response: { data: cached.response },
+        metadata: {
+          mode: 'orchestrator',
+          escalated: false,
+          providerKey: pair.orchestrator,
+          providerType: orchestratorConfig.type,
+          model: orchestratorConfig.model,
+          originalTokens,
+          finalTokens: this.estimateTokens(request.messages),
+        },
+      };
+    }
+
+    const metadata: RouteMetadata = {
+      mode: 'orchestrator',
+      escalated: false,
+      providerKey: pair.orchestrator,
+      providerType: orchestratorConfig.type,
+      model: orchestratorConfig.model,
+      originalTokens,
+      finalTokens: this.estimateTokens(request.messages),
+    };
+
+    const { response, toolCalls } = await this.callWithRoutingMetadata(
+      () => this.callProviderOrToolLoop(request, orchestratorConfig),
+      metadata,
+    );
+
+    if (response.data) {
+      await this.cacheService.store(
+        request.messages,
+        response.data,
+        originalTokens - this.estimateTokens(request.messages),
+      );
+    }
+
+    return { response, metadata: { ...metadata, toolCalls } };
   }
 
   private resolveContextLimit(modelConfig: any): number | undefined {

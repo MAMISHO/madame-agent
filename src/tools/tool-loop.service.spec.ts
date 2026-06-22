@@ -115,7 +115,7 @@ describe('ToolLoopService', () => {
     expect(result.toolCalls[0].name).toBe('read_file');
     expect(result.toolCalls[0].latencyMs).toBeGreaterThanOrEqual(0);
     expect(result.toolCalls[0].iteration).toBe(1);
-    expect(toolFn).toHaveBeenCalledWith({ path: 'test.ts' });
+    expect(toolFn).toHaveBeenCalledWith({ path: 'test.ts' }, expect.any(Object));
     expect(mockSandbox.check).toHaveBeenCalledWith('read_file', { path: 'test.ts' });
   });
 

@@ -23,7 +23,8 @@ Stack: **NestJS + TypeScript**
 | F9: Translation Layer | ✅ COMPLETO | TranslationService con detección de idioma + traducción vía Ollama, integrado en RouterService |
 | F10: Observability | ✅ COMPLETO | Métricas, health, logs por request |
 | F11: Tool Calling | ✅ COMPLETO | 6 fases: DTO → ToolRegistry → Sandbox → ToolLoop → Router → Tests. 9 built-in tools. |
-| Tests unitarios | ✅ COMPLETO | 60 tests, 10 suites |
+| F12: Orchestrator Delegation | ✅ COMPLETO | Orquestador cloud delega a subagentes locales/híbridos, failover ordenado, trazabilidad activa y cascading abort |
+| Tests unitarios | ✅ COMPLETO | 71 tests, 10 suites |
 | Observability trackRequest | ✅ COMPLETO | RouterService devuelve RouteResult con metadata, ProxyController llama trackRequest() |
 | Conexión OpenCode | ✅ COMPLETO | Provider `madame-agent` configurado en opencode.json como OpenAI-compatible |
 | Conexión NVIDIA | ✅ COMPLETO | `NVIDIA_API_KEY` en env, routing.yaml apunta a NVIDIA |
@@ -216,3 +217,4 @@ confidence:
 - [x] Translation Layer implementado: detección y traducción de input no-inglés
 - [x] Tool Calling implementado: ToolLoopService, ToolRegistryService, SandboxManagerService, 9 built-in tools, integración en RouterService
 - [x] Tool Calling spec documentada y ejecutada: `docs/tool-calling-spec.md` → implementación completa en 6 fases
+- [x] Delegación Orquestador-Subagente: Orquestador cloud delega subtareas, tolerancia a fallos, trazabilidad y cancelación en cascada, documentado en docs/orquestador-subagentes.md
