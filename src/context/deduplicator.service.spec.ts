@@ -104,9 +104,9 @@ describe('DeduplicatorService', () => {
   it('treats assistant messages with different tool_calls as different', () => {
     const msgs: Message[] = [
       { role: 'user', content: 'do something' },
-      { role: 'assistant', content: '', tool_calls: [{ id: 'call1' }] },
+      { role: 'assistant', content: '', tool_calls: [{ id: 'call1', type: 'function', function: { name: 'test', arguments: '{}' } }] },
       { role: 'user', content: 'continue' },
-      { role: 'assistant', content: '', tool_calls: [{ id: 'call2' }] },
+      { role: 'assistant', content: '', tool_calls: [{ id: 'call2', type: 'function', function: { name: 'test', arguments: '{}' } }] },
     ];
 
     const result = service.deduplicate(msgs);

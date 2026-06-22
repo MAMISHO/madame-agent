@@ -1,0 +1,48 @@
+{
+  "exists": true,
+  "path": "/Users/mamisho/dev/madame-agent/custom-test",
+  "items": [
+    "test_1",
+    "test_2",
+    "test_3",
+    "test_4",
+    "test_5"
+  ],
+  "detail": {
+    "test_1": {
+      "type": "directory",
+      "children": [
+        "test-agentes.py",
+        "results_1"
+      ]
+    },
+    "test_2": {
+      "type": "directory",
+      "children": [
+        "test-agentes-tools.py",
+        "results_2"
+      ]
+    },
+    "test_3": {
+      "type": "directory",
+      "children": [
+        "test-completo.py",
+        "results_3"
+      ]
+    },
+    "test_4": {
+      "type": "directory",
+      "children": [
+        "results_4",
+        "test-herramientas-agt.py"
+      ]
+    },
+    "test_5": {
+      "type": "directory",
+      "children": [
+        "test-investigacion.py",
+        "results_5"
+      ]
+    }
+  }
+}

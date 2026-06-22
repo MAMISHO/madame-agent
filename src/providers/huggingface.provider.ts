@@ -17,6 +17,7 @@ export class HuggingFaceProvider implements ModelProvider {
   async chat(
     request: ChatCompletionRequest,
     modelConfig: any,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
     this.logger.debug(`Calling HuggingFace for model ${modelConfig.model}`);
 
@@ -38,12 +39,28 @@ export class HuggingFaceProvider implements ModelProvider {
 
       return { stream: openAiStreamWrapper() as AsyncIterable<Uint8Array> };
     } else {
-      const data = await this.hf.chatCompletion({
+      // Use Promise.race for abort — the SDK may not support AbortSignal natively
+      const hfPromise = this.hf.chatCompletion({
         model: modelConfig.model,
         messages: request.messages as any,
         max_tokens: request.max_tokens,
         temperature: request.temperature,
       });
+
+      const data = signal
+        ? await Promise.race([
+            hfPromise,
+            new Promise<never>((_, reject) => {
+              if (signal.aborted) {
+                reject(new DOMException('The operation was aborted.', 'AbortError'));
+                return;
+              }
+              signal.addEventListener('abort', () => {
+                reject(new DOMException('The operation was aborted.', 'AbortError'));
+              }, { once: true });
+            }),
+          ])
+        : await hfPromise;
 
       return { data };
     }

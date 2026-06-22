@@ -1,0 +1,247 @@
+[
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:12 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "event": "tool_loop_start",
+    "tools_count": 9,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:19 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterService] \u001b[39m\u001b[32mToolLoop activated: 9 tool(s) provided, model=gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 1,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:25 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 1: model made 1 tool call(s) (5844ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:25 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 2,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:39 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 2: model made 1 tool call(s) (20161ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:39 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 3,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:49 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 3: model made 1 tool call(s) (30618ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:49 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 4,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:53 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 4: model made 1 tool call(s) (34250ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:53 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 5,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:55 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 5: model made 1 tool call(s) (36182ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:55 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 6,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:58 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 6: model made 1 tool call(s) (38815ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:47:58 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 7,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:48:00 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 7: model made 1 tool call(s) (40812ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:48:00 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 8,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:48:06 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 8: model made 1 tool call(s) (47634ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:48:06 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 9,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:48:53 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 9: model made 1 tool call(s) (94569ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:48:53 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 10,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:19 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 10: model made 1 tool call(s) (120225ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 11,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:22 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 11: model made 1 tool call(s) (122954ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "tool_error",
+    "tool": "move_file",
+    "error": "The \"paths[0]\" argument must be of type string. Received undefined (6ms)\u001b[39m",
+    "iteration": 11,
+    "raw": "\u001b[33m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:22 \u001b[33m   WARN\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[33mTool 'move_file': The \"paths[0]\" argument must be of type string. Received undefined (6ms)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:22 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 12,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:28 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 12: model made 1 tool call(s) (129703ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:28 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 13,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:40 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 13: model made 1 tool call(s) (141746ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "tool_error",
+    "tool": "move_file",
+    "error": "The \"paths[0]\" argument must be of type string. Received undefined (2ms)\u001b[39m",
+    "iteration": 13,
+    "raw": "\u001b[33m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:40 \u001b[33m   WARN\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[33mTool 'move_file': The \"paths[0]\" argument must be of type string. Received undefined (2ms)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:40 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 14,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:44 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 14: model made 1 tool call(s) (145479ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "tool_error",
+    "tool": "copy_file",
+    "error": "The \"paths[0]\" argument must be of type string. Received undefined (1ms)\u001b[39m",
+    "iteration": 14,
+    "raw": "\u001b[33m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:44 \u001b[33m   WARN\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[33mTool 'copy_file': The \"paths[0]\" argument must be of type string. Received undefined (1ms)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:44 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 15,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:49 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 15: model made 1 tool call(s) (150457ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:49:49 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 16,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:50:02 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 16: model made 1 tool call(s) (162842ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:50:02 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 17,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:50:05 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 17: model made 1 tool call(s) (166465ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:50:05 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 18,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:50:09 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 18: model made 1 tool call(s) (170433ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:50:09 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  },
+  {
+    "iteration": 19,
+    "event": "tool_calls",
+    "count": 1,
+    "raw": "\u001b[32m[Nest] 62562  - \u001b[39m13/06/2026, 0:50:13 \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[ToolLoopService] \u001b[39m\u001b[32mToolLoop iteration 19: model made 1 tool call(s) (174143ms elapsed)\u001b[39m"
+  },
+  {
+    "event": "provider_call",
+    "provider": "ollama",
+    "raw": "\u001b[95m[Nest] 62562  - \u001b[39m13/06/2026, 0:50:13 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[OllamaProvider] \u001b[39m\u001b[95mCalling Ollama API for model gemma4:12b-mlx\u001b[39m"
+  }
+]

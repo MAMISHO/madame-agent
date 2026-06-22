@@ -4,9 +4,12 @@ import { ProvidersModule } from '../providers/providers.module';
 import { ClassifierModule } from '../classifier/classifier.module';
 import { ConfidenceModule } from '../confidence/confidence.module';
 import { ContextModule } from '../context/context.module';
+import { CacheModule } from '../cache/cache.module';
+import { TranslationModule } from '../translation/translation.module';
+import { ToolsModule } from '../tools/tools.module';
 
 @Module({
-  imports: [ProvidersModule, ClassifierModule, ConfidenceModule, ContextModule],
+  imports: [ProvidersModule, ClassifierModule, ConfidenceModule, ContextModule, CacheModule, TranslationModule, ToolsModule],
   providers: [RouterService],
   exports: [RouterService],
 })

@@ -1,11 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ChatCompletionRequest } from '../proxy/dto/openai.dto';
+import { ChatCompletionRequest, ToolCallRecord } from '../proxy/dto/openai.dto';
 import { ProvidersService } from '../providers/providers.service';
 import { ProviderResponse } from '../providers/provider.interface';
 import { ClassifierService } from '../classifier/classifier.service';
 import { ConfidenceEngineService } from '../confidence/confidence.service';
 import { ContextService } from '../context/context.service';
+import { CacheService } from '../cache/cache.service';
+import { TranslationService } from '../translation/translation.service';
+import { ToolLoopService } from '../tools/tool-loop.service';
 
 export interface RouteMetadata {
   mode: 'direct' | 'classifier';
@@ -17,6 +20,7 @@ export interface RouteMetadata {
   model: string;
   originalTokens: number;
   finalTokens: number;
+  toolCalls?: ToolCallRecord[];
 }
 
 export interface RouteResult {
@@ -34,9 +38,16 @@ export class RouterService {
     private classifierService: ClassifierService,
     private confidenceEngine: ConfidenceEngineService,
     private contextService: ContextService,
+    private cacheService: CacheService,
+    private translationService: TranslationService,
+    private toolLoopService: ToolLoopService,
   ) {}
 
   async route(request: ChatCompletionRequest): Promise<RouteResult> {
+    if (this.translationService.isEnabled()) {
+      request.messages = await this.translationService.translateMessages(request.messages);
+    }
+
     const providersConfig = this.configService.get('providers') || {};
     const modelPairs = this.configService.get('model_pairs') || [];
 
@@ -66,22 +77,47 @@ export class RouterService {
           maxTokens: this.resolveContextLimit(directMatch.config),
         });
         request.messages = processed.messages;
-        const response = await providerInstance.chat(
-          request,
-          directMatch.config,
-        );
-        return {
-          response,
-          metadata: {
-            mode: 'direct',
-            escalated: false,
-            providerKey: directMatch.key,
-            providerType: directMatch.config.type,
-            model: directMatch.config.model,
-            originalTokens,
-            finalTokens: this.estimateTokens(request.messages),
-          },
+
+        const cacheInput = JSON.stringify(request.messages);
+        const cached = await this.cacheService.findSimilar(cacheInput);
+        if (cached) {
+          return {
+            response: { data: cached.response },
+            metadata: {
+              mode: 'direct',
+              escalated: false,
+              providerKey: directMatch.key,
+              providerType: directMatch.config.type,
+              model: directMatch.config.model,
+              originalTokens,
+              finalTokens: this.estimateTokens(request.messages),
+            },
+          };
+        }
+
+        const metadata: RouteMetadata = {
+          mode: 'direct',
+          escalated: false,
+          providerKey: directMatch.key,
+          providerType: directMatch.config.type,
+          model: directMatch.config.model,
+          originalTokens,
+          finalTokens: this.estimateTokens(request.messages),
         };
+        const { response, toolCalls } = await this.callWithRoutingMetadata(
+          () => this.callProviderOrToolLoop(request, directMatch.config),
+          metadata,
+        );
+
+        if (response.data) {
+          await this.cacheService.store(
+            request.messages,
+            response.data,
+            originalTokens - this.estimateTokens(request.messages),
+          );
+        }
+
+        return { response, metadata: { ...metadata, toolCalls } };
       }
       this.logger.debug(
         `Model "${request.model}" not found in providers config, falling back to classifier routing.`,
@@ -89,9 +125,10 @@ export class RouterService {
     }
 
     // 3. Classifier-based routing with confidence evaluation
-    const messagesStr = JSON.stringify(request.messages);
+    // Use only the last user message so the classifier isn't dominated by the system prompt
+    const userInput = this.lastUserMessage(request.messages);
     const classification =
-      await this.classifierService.classifyTask(messagesStr);
+      await this.classifierService.classifyTask(userInput);
 
     this.logger.debug(
       `Classifier: mode=${classification.mode}, confidence=${classification.confidence.toFixed(3)}`,
@@ -131,24 +168,50 @@ export class RouterService {
     });
     request.messages = processed.messages;
 
-    const providerInstance = this.providersService.getProvider(
-      modelConfig.type,
-    );
-    const response = await providerInstance.chat(request, modelConfig);
-    return {
-      response,
-      metadata: {
-        mode: 'classifier',
-        classifierMode: classification.mode,
-        confidence: classification.confidence,
-        escalated: decision.shouldEscalate,
-        providerKey: selectedProviderKey,
-        providerType: modelConfig.type,
-        model: modelConfig.model,
-        originalTokens,
-        finalTokens: this.estimateTokens(request.messages),
-      },
+    const cacheInput = JSON.stringify(request.messages);
+    const cached = await this.cacheService.findSimilar(cacheInput);
+    if (cached) {
+      return {
+        response: { data: cached.response },
+        metadata: {
+          mode: 'classifier',
+          classifierMode: classification.mode,
+          confidence: classification.confidence,
+          escalated: decision.shouldEscalate,
+          providerKey: selectedProviderKey,
+          providerType: modelConfig.type,
+          model: modelConfig.model,
+          originalTokens,
+          finalTokens: this.estimateTokens(request.messages),
+        },
+      };
+    }
+
+    const metadata: RouteMetadata = {
+      mode: 'classifier',
+      classifierMode: classification.mode,
+      confidence: classification.confidence,
+      escalated: decision.shouldEscalate,
+      providerKey: selectedProviderKey,
+      providerType: modelConfig.type,
+      model: modelConfig.model,
+      originalTokens,
+      finalTokens: this.estimateTokens(request.messages),
     };
+    const { response, toolCalls } = await this.callWithRoutingMetadata(
+      () => this.callProviderOrToolLoop(request, modelConfig),
+      metadata,
+    );
+
+    if (response.data) {
+      await this.cacheService.store(
+        request.messages,
+        response.data,
+        originalTokens - this.estimateTokens(request.messages),
+      );
+    }
+
+    return { response, metadata: { ...metadata, toolCalls } };
   }
 
   private async routeThroughPair(
@@ -165,9 +228,9 @@ export class RouterService {
       throw new Error(`Cloud provider "${pair.cloud}" not found for pair "${pair.name}"`);
     }
 
-    // Run classifier to determine if we should escalate
-    const messagesStr = JSON.stringify(request.messages);
-    const classification = await this.classifierService.classifyTask(messagesStr);
+    // Run classifier on the last user message only (not the system prompt)
+    const userInput = this.lastUserMessage(request.messages);
+    const classification = await this.classifierService.classifyTask(userInput);
     const decision = this.confidenceEngine.evaluate(classification);
 
     // Escalate if the task requires planning (needs powerful cloud model)
@@ -190,23 +253,89 @@ export class RouterService {
     });
     request.messages = processed.messages;
 
-    const providerInstance = this.providersService.getProvider(providerType);
-    const response = await providerInstance.chat(request, selectedConfig);
+    const cacheInput = JSON.stringify(request.messages);
+    const cached = await this.cacheService.findSimilar(cacheInput);
+    if (cached) {
+      return {
+        response: { data: cached.response },
+        metadata: {
+          mode: 'classifier',
+          classifierMode: classification.mode,
+          confidence: classification.confidence,
+          escalated: shouldEscalate,
+          providerKey,
+          providerType,
+          model: selectedConfig.model,
+          originalTokens,
+          finalTokens: this.estimateTokens(request.messages),
+        },
+      };
+    }
 
-    return {
-      response,
-      metadata: {
-        mode: 'classifier',
-        classifierMode: classification.mode,
-        confidence: classification.confidence,
-        escalated: shouldEscalate,
-        providerKey,
-        providerType,
-        model: selectedConfig.model,
-        originalTokens,
-        finalTokens: this.estimateTokens(request.messages),
-      },
+    const metadata: RouteMetadata = {
+      mode: 'classifier',
+      classifierMode: classification.mode,
+      confidence: classification.confidence,
+      escalated: shouldEscalate,
+      providerKey,
+      providerType,
+      model: selectedConfig.model,
+      originalTokens,
+      finalTokens: this.estimateTokens(request.messages),
     };
+    const { response, toolCalls } = await this.callWithRoutingMetadata(
+      () => this.callProviderOrToolLoop(request, selectedConfig),
+      metadata,
+    );
+
+    if (response.data) {
+      await this.cacheService.store(
+        request.messages,
+        response.data,
+        originalTokens - this.estimateTokens(request.messages),
+      );
+    }
+
+    return { response, metadata: { ...metadata, toolCalls } };
+  }
+
+  private async callWithRoutingMetadata(
+    task: () => Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[] }>,
+    metadata: RouteMetadata,
+  ): Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[] }> {
+    try {
+      return await task();
+    } catch (error) {
+      throw Object.assign(error, { routingMetadata: metadata });
+    }
+  }
+
+  private async callProviderOrToolLoop(
+    request: ChatCompletionRequest,
+    modelConfig: any,
+  ): Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[] }> {
+    const hasTools = request.tools && request.tools.length > 0;
+
+    if (hasTools) {
+      this.logger.log(`ToolLoop activated: ${request.tools!.length} tool(s) provided, model=${modelConfig.model}`);
+      const result = await this.toolLoopService.execute(request, modelConfig);
+      return { response: result.response, toolCalls: result.toolCalls };
+    }
+
+    const providerInstance = this.providersService.getProvider(modelConfig.type);
+    const response = await providerInstance.chat(request, modelConfig);
+    return { response, toolCalls: undefined };
+  }
+
+  private lastUserMessage(messages: any[]): string {
+    if (!messages || messages.length === 0) return '';
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        const content = messages[i].content;
+        return typeof content === 'string' ? content : JSON.stringify(content);
+      }
+    }
+    return '';
   }
 
   private estimateTokens(messages: any[]): number {

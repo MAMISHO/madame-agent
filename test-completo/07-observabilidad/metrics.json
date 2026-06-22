@@ -1,0 +1,29 @@
+{
+  "uptime": 298,
+  "requests": {
+    "total": 8,
+    "byProvider": {
+      "local_small": 6,
+      "cloud_nvidia_deepseek": 2
+    },
+    "byMode": {
+      "direct": 7,
+      "classifier": 1
+    }
+  },
+  "escalations": {
+    "total": 1,
+    "rate": 0.125
+  },
+  "tokens": {
+    "inputTotal": 337,
+    "savedByContext": 0
+  },
+  "latency": {
+    "avgMs": 37170
+  },
+  "errors": {
+    "total": 0,
+    "byProvider": {}
+  }
+}

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Req, Res } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, Res, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ProxyService } from './proxy.service';
 import { ChatCompletionRequest } from './dto/openai.dto';
@@ -9,6 +9,8 @@ let requestCounter = 0;
 
 @Controller('v1')
 export class ProxyController {
+  private readonly logger = new Logger(ProxyController.name);
+
   constructor(
     private readonly proxyService: ProxyService,
     private configService: ConfigService,
@@ -104,29 +106,49 @@ export class ProxyController {
         res.json(response.data);
       }
     } catch (error: any) {
+      this.logger.error(`Request ${requestId} failed: ${error.message}`, error.stack);
+      this.logger.error(`Request details: model=${body.model || 'unknown'}, body=${JSON.stringify(body).slice(0, 500)}`);
       this.observability.finishTimer(requestId);
+
+      // Use routing metadata from the router if available (attached by callWithRoutingMetadata)
+      const routing = error.routingMetadata || {
+        requestId,
+        mode: 'direct',
+        escalated: false,
+        providerKey: 'unknown',
+        providerType: 'unknown',
+        model: body.model || 'unknown',
+      };
+      routing.requestId = requestId;
+
       this.observability.trackRequest({
         requestId,
         timestamp: new Date(),
         latencyMs: 0,
-        routing: {
-          requestId,
-          mode: 'direct',
-          escalated: false,
-          providerKey: 'unknown',
-          providerType: 'unknown',
-          model: body.model || 'unknown',
-        },
+        routing,
         originalTokens: 0,
         finalTokens: 0,
         dedupRemoved: 0,
         success: false,
         errorMessage: error.message,
       });
-      res.status(500).json({
+
+      const status =
+        error.message?.includes('not found') || error.message?.includes('missing')
+          ? 400
+          : error.message?.includes('API returned')
+            ? 502
+            : error.message?.includes('timeout')
+              ? 504
+              : 500;
+
+      res.status(status).json({
         error: {
           message: error.message || 'Internal Server Error',
-          type: 'proxy_error',
+          type: status === 502 ? 'upstream_error'
+            : status === 504 ? 'timeout'
+              : status === 400 ? 'invalid_request'
+                : 'proxy_error',
         },
       });
     }

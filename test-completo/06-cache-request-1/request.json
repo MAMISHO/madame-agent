@@ -1,0 +1,11 @@
+{
+  "model": "gemma4:12b-mlx",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is 2+2? Respond only with the number."
+    }
+  ],
+  "max_tokens": 2048,
+  "temperature": 0.3
+}

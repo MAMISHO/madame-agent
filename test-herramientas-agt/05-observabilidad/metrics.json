@@ -1,0 +1,27 @@
+{
+  "uptime": 186,
+  "requests": {
+    "total": 1,
+    "byProvider": {
+      "local_small": 1
+    },
+    "byMode": {
+      "direct": 1
+    }
+  },
+  "escalations": {
+    "total": 0,
+    "rate": 0
+  },
+  "tokens": {
+    "inputTotal": 10,
+    "savedByContext": 0
+  },
+  "latency": {
+    "avgMs": 6204
+  },
+  "errors": {
+    "total": 0,
+    "byProvider": {}
+  }
+}

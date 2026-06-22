@@ -1,0 +1,20 @@
+[
+  "\u001b[95m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[ToolRegistryService] \u001b[39m\u001b[95mTool registered: read_file\u001b[39m\n",
+  "\u001b[95m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[ToolRegistryService] \u001b[39m\u001b[95mTool registered: write_file\u001b[39m\n",
+  "\u001b[95m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[ToolRegistryService] \u001b[39m\u001b[95mTool registered: glob_files\u001b[39m\n",
+  "\u001b[95m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[ToolRegistryService] \u001b[39m\u001b[95mTool registered: list_directory\u001b[39m\n",
+  "\u001b[95m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[ToolRegistryService] \u001b[39m\u001b[95mTool registered: move_file\u001b[39m\n",
+  "\u001b[95m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[ToolRegistryService] \u001b[39m\u001b[95mTool registered: copy_file\u001b[39m\n",
+  "\u001b[95m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[ToolRegistryService] \u001b[39m\u001b[95mTool registered: execute_command\u001b[39m\n",
+  "\u001b[95m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[ToolRegistryService] \u001b[39m\u001b[95mTool registered: create_directory\u001b[39m\n",
+  "\u001b[95m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[95m  DEBUG\u001b[39m \u001b[38;5;3m[ToolRegistryService] \u001b[39m\u001b[95mTool registered: delete_file\u001b[39m\n",
+  "\u001b[31m[Nest] 34854  - \u001b[39m10/06/2026, 15:17:19 \u001b[31m  ERROR\u001b[39m \u001b[38;5;3m[ExceptionHandler] \u001b[39mUnknownDependenciesException [Error]: Nest can't resolve dependencies of the RouterService (ConfigService, ProvidersService, ClassifierService, ConfidenceEngineService, ContextService, CacheService, TranslationService, ?). Please make sure that the argument ToolLoopService at index [7] is available in the RouterModule module.\n",
+  "- If ToolLoopService is a provider, is it part of the current RouterModule?\n",
+  "- If ToolLoopService is exported from a separate @Module, is that module imported within RouterModule?\n",
+  "    imports: [ /* the Module containing ToolLoopService */ ]\n",
+  "  type: \u001b[32m'RouterService'\u001b[39m,\n",
+  "      \u001b[36m[class ClassifierService]\u001b[39m,\n",
+  "      \u001b[36m[class ConfidenceEngineService]\u001b[39m,\n",
+  "      \u001b[36m[class ToolLoopService]\u001b[39m\n",
+  "    name: \u001b[36m[class ToolLoopService]\u001b[39m\n"
+]

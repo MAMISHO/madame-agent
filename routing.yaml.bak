@@ -1,0 +1,89 @@
+providers:
+  local_small:
+    type: ollama
+    model: gemma4:12b-mlx
+    base_url: http://localhost:11434
+  local_medium:
+    type: ollama
+    model: gemma4:12b-mlx
+    base_url: http://localhost:11434
+  local_qwen:
+    type: ollama
+    model: qwen3.6:27b
+    base_url: http://localhost:11434
+  cloud_nvidia:
+    type: cloud
+    provider: nvidia
+    model: meta/llama-3.3-70b-instruct
+    api_key_env: NVIDIA_API_KEY
+  cloud_nvidia_deepseek:
+    type: cloud
+    provider: nvidia
+    model: deepseek-ai/deepseek-v4-flash
+    api_key_env: NVIDIA_API_KEY
+
+routing:
+  plan:
+    provider: cloud_nvidia
+  execution:
+    provider: local_medium
+  escalation:
+    provider: cloud_nvidia
+
+model_pairs:
+  - id: gemma4-deepseek
+    name: "Gemma4-12B+DeepseekV4Flash"
+    local: local_medium
+    cloud: cloud_nvidia_deepseek
+  - id: gemma4-llama
+    name: "Gemma4-12B+Llama70B"
+    local: local_medium
+    cloud: cloud_nvidia
+  - id: qwen-deepseek
+    name: "qwen3.6:27b+DeepseekV4Flash"
+    local: local_qwen
+    cloud: cloud_nvidia_deepseek
+  - id: qwen-llama
+    name: "qwen3.6:27b+Llama70B"
+    local: local_qwen
+    cloud: cloud_nvidia
+
+translation:
+  enabled: false
+  model: gemma4:12b-mlx
+  base_url: http://localhost:11434
+  target_lang: en
+
+cache:
+  enabled: false
+  threshold: 0.92
+  max_entries: 500
+  embedding_model: nomic-embed-text:latest
+  embedding_base_url: http://localhost:11434
+
+tools:
+  enabled: true
+  max_iterations: 10
+  global_timeout_ms: 120000
+  sandbox:
+    workspace: /Users/mamisho/dev/madame-agent
+    denied_commands:
+      - rm
+      - sudo
+      - curl
+      - wget
+    max_timeout_ms: 30000
+    allow_network: false
+  builtin_tools:
+    - read_file
+    - write_file
+    - glob_files
+    - list_directory
+    - move_file
+    - copy_file
+    - execute_command
+    - create_directory
+    - delete_file
+
+confidence:
+  threshold: 0.70

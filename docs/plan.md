@@ -19,11 +19,11 @@ Stack: **NestJS + TypeScript**
 | F5: Task Classifier | ✅ COMPLETO | transformers.js zero-shot, devuelve {mode, confidence} |
 | F6: Confidence Engine | ✅ COMPLETO | ConfidenceEngineService con threshold configurable |
 | F7: Escalation System | ✅ COMPLETO | Routing a escalation provider si confidence < threshold |
-| F8: Semantic Cache | ⬜ PENDIENTE | |
-| F9: Translation Layer | ⬜ PENDIENTE | |
+| F8: Semantic Cache | ✅ COMPLETO | CacheService con embeddings vía Ollama, cosine similarity, in-memory store, integrado en RouterService (3 rutas) |
+| F9: Translation Layer | ✅ COMPLETO | TranslationService con detección de idioma + traducción vía Ollama, integrado en RouterService |
 | F10: Observability | ✅ COMPLETO | Métricas, health, logs por request |
-| F11: Tool Calling | 📄 SPEC | Spec completa en docs/tool-calling-spec.md. Pendiente implementación |
-| Tests unitarios | ✅ COMPLETO | 42 tests, 7 suites |
+| F11: Tool Calling | ✅ COMPLETO | 6 fases: DTO → ToolRegistry → Sandbox → ToolLoop → Router → Tests. 9 built-in tools. |
+| Tests unitarios | ✅ COMPLETO | 60 tests, 10 suites |
 | Observability trackRequest | ✅ COMPLETO | RouterService devuelve RouteResult con metadata, ProxyController llama trackRequest() |
 | Conexión OpenCode | ✅ COMPLETO | Provider `madame-agent` configurado en opencode.json como OpenAI-compatible |
 | Conexión NVIDIA | ✅ COMPLETO | `NVIDIA_API_KEY` en env, routing.yaml apunta a NVIDIA |
@@ -89,14 +89,14 @@ Stack: **NestJS + TypeScript**
 | 5.5 | Fix: Observability trackRequest | ✅ | RouterService ahora devuelve RouteResult con metadata de routing; ProxyController llama trackRequest() con datos reales |
 | 5.6 | Tests actualizados | ✅ | 10 tests de RouterService (antes 9), todos pasan; 42 totales |
 
-### PRIORIDAD 6 — Funcionalidades Avanzadas ⬜
+### PRIORIDAD 6 — Funcionalidades Avanzadas ✅
 
 | # | Tarea | Archivos | Dependencias | Detalle |
 |---|---|---|---|---|
-| 6.1 | Semantic Cache | `src/cache/` (nuevo) | 1.x | Cache de respuestas vía embeddings + vector store. Requests similares devuelven respuesta cacheada sin llamar al LLM. Reduce latencia y coste cloud. |
-| 6.2 | Translation Layer | `src/translation/` (nuevo) | 1.x, 3.x | Detección y traducción automática de input no inglés antes de enviar al modelo. Usa modelo pequeño local para traducción. |
-| 6.3 | Tool Calling | `src/tools/` (nuevo) | 1.x | ToolLoopService + ToolRegistry + SandboxManager. Spec detallada en docs/tool-calling-spec.md. Pendiente implementación. |
-| 6.4 | Tests E2E completos | `test/` | 1.x-6.3 | Tests de integración reales contra Ollama + NVIDIA, validando todos los flujos de routing. |
+| 6.1 | Semantic Cache ✅ | `src/cache/cache.service.ts` | 1.x | CacheService con generateEmbedding() vía Ollama /api/embeddings, cosine similarity en in-memory vector store. Integrado en RouterService: check → hit → return cache, miss → call provider → store. Configurable via routing.yaml `cache.enabled`. |
+| 6.2 | Translation Layer ✅ | `src/translation/translation.service.ts` | 1.x | TranslationService con detectLanguage() + translateTo() vía Ollama /api/generate. Traduce mensajes de usuario no-inglés antes de routing. Configurable via routing.yaml `translation.enabled`. |
+| 6.3 | Tool Calling ✅ | `src/tools/` | 1.x | 6 fases completadas: (1) DTO: ToolDefinition, ToolCall, ToolMessage tipados, (2) ToolRegistryService registro central, (3) SandboxManagerService validación de paths/commands/network, (4) ToolLoopService loop modelo→tool→resultado con max_iterations, (5) Integración en RouterService via callProviderOrToolLoop(), (6) 18 tests unitarios. 9 built-in tools: read, write, glob, ls, mv, cp, exec, mkdir, rm. |
+| 6.4 | Tests E2E ✅ | `test-madame.sh` | 1.x-6.3 | Script E2E con 11 secciones: health, models, model pairs, chat local, chat NVIDIA, escalamiento, métricas, streaming, tool calling. |
 
 ### PRIORIDAD 7 — Mejoras de Observabilidad (Post-MVP) ⬜
 
@@ -201,16 +201,18 @@ confidence:
 ## Definición de Éxito
 
 - [x] Repo limpio: .gitignore, sin node_modules/dist/.atl trackeados
-- [x] Tests unitarios: 42 tests, 7 suites, todos pasan
+- [x] Tests unitarios: 60 tests, 10 suites, todos pasan
 - [x] Context Processor: deduplicación + compresión implementados
 - [x] Confidence Engine + Escalation: threshold 0.7, escalado a cloud
 - [x] Observabilidad: health, metrics, timing por request
-- [x] Documentación técnica: docs/confidence-engine.md, docs/context-processor.md, docs/observability.md
+- [x] Documentación técnica: docs/confidence-engine.md, docs/context-processor.md, docs/observability.md, docs/tool-calling-spec.md
 - [x] OpenCode configurado como provider `madame-agent` apuntando a `http://localhost:3000/v1`
 - [x] Routing automático redirige a local para execution (confidence >= 0.7), cloud para plan / escalado
 - [x] Escalamiento funciona: confidence baja (< 0.7) → cloud (NVIDIA Llama 3.3 70B)
-- [x] Tests de integración (curl) pasan: health, models, chat completions (non-stream + stream), escalado
+- [x] Tests de integración (curl) pasan: health, models, chat completions (non-stream + stream), escalado, tool calling
 - [x] Observability trackRequest integrado: métricas por request con metadata de routing
-- [ ] Reducción de llamadas cloud visibles en logs
-- [x] Tool Calling spec documentada: `docs/tool-calling-spec.md` con arquitectura, servicios, seguridad y plan de fases
-- [ ] Tool Calling implementado: ToolLoopService, ToolRegistryService, SandboxManagerService, integración en RouterService
+- [x] Semantic Cache implementado: embeddings vía Ollama, cosine similarity, cache hit/miss en 3 rutas de routing
+- [ ] Reducción de llamadas cloud visibles en logs (depende de Semantic Cache habilitado)
+- [x] Translation Layer implementado: detección y traducción de input no-inglés
+- [x] Tool Calling implementado: ToolLoopService, ToolRegistryService, SandboxManagerService, 9 built-in tools, integración en RouterService
+- [x] Tool Calling spec documentada y ejecutada: `docs/tool-calling-spec.md` → implementación completa en 6 fases

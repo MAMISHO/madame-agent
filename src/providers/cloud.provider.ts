@@ -12,6 +12,7 @@ export class CloudProvider implements ModelProvider {
   async chat(
     request: ChatCompletionRequest,
     modelConfig: any,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
     this.logger.debug(
       `Calling Cloud API for provider ${modelConfig.provider} and model ${modelConfig.model}`,
@@ -26,6 +27,8 @@ export class CloudProvider implements ModelProvider {
         baseUrl = 'https://api.anthropic.com/v1';
       } else if (modelConfig.provider === 'nvidia') {
         baseUrl = 'https://integrate.api.nvidia.com/v1';
+      } else if (modelConfig.provider === 'google') {
+        baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai';
       } else {
         throw new Error(
           `Unsupported cloud provider without base_url: ${modelConfig.provider}`,
@@ -55,6 +58,11 @@ export class CloudProvider implements ModelProvider {
         apiKey =
           this.configService.get<string>('NVIDIA_API_KEY') ||
           process.env.NVIDIA_API_KEY ||
+          '';
+      } else if (modelConfig.provider === 'google') {
+        apiKey =
+          this.configService.get<string>('GOOGLE_GENERATIVE_AI_API_KEY') ||
+          process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
           '';
       }
     }
@@ -106,6 +114,7 @@ export class CloudProvider implements ModelProvider {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
+      signal,
     });
 
     if (!response.ok) {
