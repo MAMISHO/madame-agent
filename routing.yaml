@@ -44,22 +44,90 @@ routing:
     provider: cloud_nvidia
   subagent:
     providers:
+      - local_gemma_oc
+      - local_qwen_oc
       - local_medium
       - local_qwen
 
 orchestrator_pairs:
-  - id: llama-gemma-orchestrator
-    name: "Llama70B-Orchestrator+Gemma12B"
-    orchestrator: cloud_nvidia
-    subagents:
-      - local_medium
-      - local_qwen
-  - id: deepseek-hybrid-orchestrator
-    name: "DeepseekFlash-Orchestrator+Gemma4DeepseekHybrid"
+  - id: deepseek-gemma-orch
+    name: "DeepseekV4Flash-Orchestrator+Gemma4-12B"
     orchestrator: cloud_nvidia_deepseek
     subagents:
-      - gemma4-deepseek
-      - local_medium
+      - gemma4:12b-mlx-oc
+      - gemma4:12b-mlx
+      - qwen3.6:27b
+  - id: llama-gemma-orch
+    name: "Llama70B-Orchestrator+Gemma4-12B"
+    orchestrator: cloud_nvidia
+    subagents:
+      - gemma4:12b-mlx-oc
+      - gemma4:12b-mlx
+      - qwen3.6:27b
+  - id: deepseek-qwen-orch
+    name: "DeepseekV4Flash-Orchestrator+Qwen27B"
+    orchestrator: cloud_nvidia_deepseek
+    subagents:
+      - qwen3.6:27b-oc
+      - qwen3.6:27b
+      - gemma4:12b-mlx
+  - id: llama-qwen-orch
+    name: "Llama70B-Orchestrator+Qwen27B"
+    orchestrator: cloud_nvidia
+    subagents:
+      - qwen3.6:27b-oc
+      - qwen3.6:27b
+      - gemma4:12b-mlx
+  - id: deepseek-gemma-oc-orch
+    name: "DeepseekV4Flash-Orchestrator+Gemma12B-OC"
+    orchestrator: cloud_nvidia_deepseek
+    subagents:
+      - gemma4:12b-mlx-oc
+      - qwen3.6:27b-oc
+  - id: deepseek-qwen-oc-orch
+    name: "DeepseekV4Flash-Orchestrator+Qwen27B-OC"
+    orchestrator: cloud_nvidia_deepseek
+    subagents:
+      - qwen3.6:27b-oc
+      - gemma4:12b-mlx-oc
+  - id: gemini-qwen-oc-orch
+    name: "Gemini-Orchestrator+Qwen27B-OC"
+    orchestrator: cloud_google
+    subagents:
+      - qwen3.6:27b-oc
+      - gemma4:12b-mlx-oc
+  - id: gemini-gemma-oc-orch
+    name: "Gemini-Orchestrator+Gemma12B-OC"
+    orchestrator: cloud_google
+    subagents:
+      - gemma4:12b-mlx-oc
+      - qwen3.6:27b-oc
+  - id: llama-gemma-hybrid-orch
+    name: "Llama70B-Orchestrator+Gemma4-Llama-Hybrid"
+    orchestrator: cloud_nvidia
+    subagents:
+      - gemma4:12b-mlx-oc+Llama70B
+      - gemma4:12b-mlx-oc
+      - qwen3.6:27b-oc
+  - id: deepseek-gemma-hybrid-orch
+    name: "DeepseekV4Flash-Orchestrator+Gemma4-Deepseek-Hybrid"
+    orchestrator: cloud_nvidia_deepseek
+    subagents:
+      - gemma4:12b-mlx-oc+DeepseekV4Flash
+      - gemma4:12b-mlx-oc
+      - qwen3.6:27b-oc
+  - id: gemini-gemma-hybrid-orch
+    name: "Gemini-Orchestrator+Gemma-Gemini-Hybrid"
+    orchestrator: cloud_google
+    subagents:
+      - gemma4:12b-mlx-oc+Gemini
+      - gemma4:12b-mlx-oc
+  - id: gemini-qwen-hybrid-orch
+    name: "Gemini-Orchestrator+Qwen-Gemini-Hybrid"
+    orchestrator: cloud_google
+    subagents:
+      - qwen3.6:27b-oc+Gemini
+      - qwen3.6:27b-oc
 
 
 model_pairs:
@@ -95,6 +163,10 @@ model_pairs:
     name: "gemma4:12b-mlx-oc+Gemini"
     local: local_gemma_oc
     cloud: cloud_google
+  - id: gemma-llama-oc
+    name: "gemma4:12b-mlx-oc+Llama70B"
+    local: local_gemma_oc
+    cloud: cloud_nvidia
 
 translation:
   enabled: false

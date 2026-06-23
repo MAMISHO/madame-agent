@@ -71,8 +71,9 @@ export class CloudProvider implements ModelProvider {
     let headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
+    const { requestId, parentRequestId, signal: _signal, ...cleanRequest } = request as any;
     let payload = {
-      ...request,
+      ...cleanRequest,
       model: modelConfig.model,
     };
 
@@ -110,19 +111,70 @@ export class CloudProvider implements ModelProvider {
       };
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      signal,
-    });
+    let attempts = 0;
+    const maxAttempts = 4;
+    let delayMs = 4000;
+    let response: any = null;
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      this.logger.error(
-        `Cloud API Error from ${url}: ${response.status} ${errorText}`,
-      );
-      throw new Error(`Cloud API returned ${response.status}: ${errorText}`);
+    while (attempts < maxAttempts) {
+      if (signal?.aborted) {
+        this.logger.warn(`Cloud API call aborted before attempt ${attempts + 1}`);
+        throw new Error('Request aborted by client');
+      }
+
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+          signal,
+        });
+
+        if (response.ok) {
+          break;
+        }
+
+        const errorText = await response.text();
+        const status = response.status;
+        const isRetryable = status === 429 || (status >= 500 && status < 600);
+
+        if (!isRetryable || attempts === maxAttempts - 1) {
+          this.logger.error(
+            `Cloud API Error from ${url}: ${status} ${errorText}`,
+          );
+          throw new Error(`Cloud API returned ${status}: ${errorText}`);
+        }
+
+        this.logger.warn(
+          `Cloud API rate limited or server error (${status}). Attempt ${attempts + 1} of ${maxAttempts}. ` +
+          `Retrying in ${delayMs}ms...`
+        );
+      } catch (err: any) {
+        if (err.name === 'AbortError' || attempts === maxAttempts - 1) {
+          throw err;
+        }
+        this.logger.warn(`Fetch connection error on attempt ${attempts + 1}: ${err.message}. Retrying in ${delayMs}ms...`);
+      }
+
+      attempts++;
+      if (signal) {
+        let timeoutId: any;
+        const abortPromise = new Promise<void>((resolve, reject) => {
+          const onAbort = () => {
+            clearTimeout(timeoutId);
+            reject(new Error('Request aborted by client'));
+          };
+          signal.addEventListener('abort', onAbort);
+          timeoutId = setTimeout(() => {
+            signal.removeEventListener('abort', onAbort);
+            resolve();
+          }, delayMs);
+        });
+        await abortPromise;
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      delayMs *= 2;
     }
 
     if (request.stream) {
@@ -133,6 +185,21 @@ export class CloudProvider implements ModelProvider {
     }
 
     const data = await response.json();
+
+    // Inject provider metadata in extra_content for uniform client detection
+    if (data && data.choices && data.choices[0] && data.choices[0].message) {
+      const msg = data.choices[0].message;
+      if (!msg.extra_content) {
+        msg.extra_content = {};
+      }
+      if (modelConfig.provider && !msg.extra_content[modelConfig.provider]) {
+        msg.extra_content[modelConfig.provider] = {
+          provider: modelConfig.provider,
+          model: modelConfig.model,
+        };
+      }
+    }
+
     return { data };
   }
 }

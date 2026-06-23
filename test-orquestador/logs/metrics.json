@@ -1,0 +1,30 @@
+{
+  "uptime": 370,
+  "requests": {
+    "total": 5,
+    "byProvider": {
+      "local_gemma_oc": 1,
+      "cloud_nvidia_deepseek": 2,
+      "cloud_google": 2
+    },
+    "byMode": {
+      "direct": 1,
+      "orchestrator": 4
+    }
+  },
+  "escalations": {
+    "total": 0,
+    "rate": 0
+  },
+  "tokens": {
+    "inputTotal": 1081,
+    "savedByContext": 0
+  },
+  "latency": {
+    "avgMs": 70161
+  },
+  "errors": {
+    "total": 0,
+    "byProvider": {}
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "uptime": 1038,
+  "requests": {
+    "total": 6,
+    "byProvider": {
+      "local_gemma_oc": 2,
+      "cloud_nvidia": 4
+    },
+    "byMode": {
+      "direct": 2,
+      "classifier": 4
+    }
+  },
+  "escalations": {
+    "total": 0,
+    "rate": 0
+  },
+  "tokens": {
+    "inputTotal": 26,
+    "savedByContext": 0
+  },
+  "latency": {
+    "avgMs": 1464
+  },
+  "errors": {
+    "total": 4,
+    "byProvider": {
+      "cloud_nvidia": 4
+    }
+  }
+}

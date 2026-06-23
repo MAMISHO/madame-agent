@@ -18,8 +18,9 @@ export class OllamaProvider implements ModelProvider {
     const baseUrl = modelConfig.base_url || 'http://localhost:11434';
     const url = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
 
+    const { requestId, parentRequestId, signal: _signal, ...cleanRequest } = request as any;
     const payload = {
-      ...request,
+      ...cleanRequest,
       model: modelConfig.model,
     };
 
