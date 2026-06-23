@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ToolDefinition } from '../proxy/dto/openai.dto';
+import { ToolDefinition, ChatCompletionRequest } from '../proxy/dto/openai.dto';
 
 export interface ToolHandler {
   definition: ToolDefinition;
-  execute: (args: any, context?: { parentRequestId?: string; parentSignal?: AbortSignal }) => Promise<any>;
+  execute: (args: any, context?: { parentRequestId?: string; parentSignal?: AbortSignal; request?: ChatCompletionRequest }) => Promise<any>;
   timeout?: number;
 }
 

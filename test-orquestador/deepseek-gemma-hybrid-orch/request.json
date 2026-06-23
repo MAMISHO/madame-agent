@@ -1,0 +1,15 @@
+{
+  "model": "DeepseekV4Flash-Orchestrator+Gemma4-Deepseek-Hybrid",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a cloud orchestrator with a local subagent available via delegate_subagent. For any file operations, delegate to the subagent and return its result."
+    },
+    {
+      "role": "user",
+      "content": "En el proyecto /Users/mamisho/dev/madame-agent, lista los archivos .py, lee el contenido del más pequeño y dime de qué se trata. Usa tu subagente para las operaciones de archivos."
+    }
+  ],
+  "max_tokens": 4096,
+  "temperature": 0.3
+}

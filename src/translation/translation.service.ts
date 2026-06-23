@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Message } from '../proxy/dto/openai.dto';
+import { loadPromptTemplate } from '../utils/template-loader';
 
 @Injectable()
 export class TranslationService {
@@ -22,9 +23,9 @@ export class TranslationService {
   }
 
   async detectLanguage(text: string): Promise<string> {
-    const prompt = `Identify the ISO 639-1 language code of this text. Respond with ONLY the two-letter code, nothing else.
-
-Text: "${text.slice(0, 500)}"`;
+    const prompt = loadPromptTemplate('detect_language.txt', {
+      text: text.slice(0, 500),
+    });
 
     const response = await this.callOllama(prompt);
     const code = response.trim().toLowerCase().slice(0, 2);
@@ -42,11 +43,11 @@ Text: "${text.slice(0, 500)}"`;
 
     this.logger.debug(`Translating from ${sourceLang} → ${targetLang}: "${text.slice(0, 60)}..."`);
 
-    const prompt = `Translate the following text from ${sourceLang} to ${targetLang}. Return ONLY the translation, no explanations, no quotes.
-
-Text: "${text.slice(0, 2000)}"
-
-Translation:`;
+    const prompt = loadPromptTemplate('translate_text.txt', {
+      sourceLang,
+      targetLang,
+      text: text.slice(0, 2000),
+    });
 
     const translated = await this.callOllama(prompt);
     return translated.trim();

@@ -74,8 +74,12 @@ export class ToolLoopService {
 
       let response: ProviderResponse;
       try {
+        const chatReq = { ...request, messages };
+        if (i > 0 && chatReq.tool_choice) {
+          delete chatReq.tool_choice;
+        }
         response = await providerInstance.chat(
-          { ...request, messages },
+          chatReq,
           modelConfig,
           abortController.signal,
         );
@@ -152,6 +156,7 @@ export class ToolLoopService {
           const result = await this.executeSingleToolCall(toolCall, {
             parentRequestId: request.requestId,
             parentSignal: abortController.signal,
+            request,
           });
           const latencyMs = Date.now() - toolStart;
 
@@ -230,7 +235,7 @@ export class ToolLoopService {
 
   private async executeSingleToolCall(
     toolCall: ToolCall,
-    context?: { parentRequestId?: string; parentSignal?: AbortSignal },
+    context?: { parentRequestId?: string; parentSignal?: AbortSignal; request?: ChatCompletionRequest },
   ): Promise<any> {
     const toolName = toolCall.function.name;
     const tool = this.toolRegistry.get(toolName);

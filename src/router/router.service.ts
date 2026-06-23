@@ -12,6 +12,7 @@ import { ToolLoopService } from '../tools/tool-loop.service';
 import { ToolRegistryService } from '../tools/tool-registry.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { randomUUID } from 'crypto';
+import { loadPromptTemplate } from '../utils/template-loader';
 
 export interface RouteMetadata {
   mode: 'direct' | 'classifier' | 'orchestrator';
@@ -51,7 +52,7 @@ export class RouterService implements OnModuleInit {
   onModuleInit() {
     this.toolRegistry.register({
       definition: this.getDelegationToolDefinition(),
-      execute: async (args: { task: string; subagent_model?: string }, context?: { parentRequestId?: string; parentSignal?: AbortSignal }) => {
+      execute: async (args: { task: string; subagent_model?: string }, context?: { parentRequestId?: string; parentSignal?: AbortSignal; request?: ChatCompletionRequest }) => {
         const parentRequestId = context?.parentRequestId || 'unknown';
         const parentSignal = context?.parentSignal;
 
@@ -62,7 +63,7 @@ export class RouterService implements OnModuleInit {
         } else {
           // Resolve subagents from active orchestrator pair if possible
           const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
-          const requestModel = context && (context as any).request?.model;
+          const requestModel = context?.request?.model;
           const pair = requestModel ? this.findOrchestratorPair(requestModel, orchestratorPairs) : null;
           if (pair && pair.subagents) {
             subagentsToTry = [...pair.subagents];
@@ -72,14 +73,15 @@ export class RouterService implements OnModuleInit {
           }
         }
 
-        this.logger.log(`delegate_subagent: Task will be tried on subagents: ${subagentsToTry.join(', ')}`);
+        this.logger.log(`[Orchestrator ${parentRequestId}] DELEGATING TASK: "${args.task.slice(0, 200)}"`);
+        this.logger.log(`[Orchestrator ${parentRequestId}] FAILOVER CRITERIA (candidate subagents in order): [${subagentsToTry.join(', ')}]`);
 
         let finalResultContent: string | null = null;
         let lastError: Error | null = null;
 
         for (const subagentModel of subagentsToTry) {
           if (parentSignal?.aborted) {
-            this.logger.warn(`Subagent execution skipped (parent request aborted)`);
+            this.logger.warn(`[Orchestrator ${parentRequestId}] Subagent execution skipped (parent request aborted)`);
             throw new Error('Parent request aborted');
           }
 
@@ -103,13 +105,17 @@ export class RouterService implements OnModuleInit {
             abortController: subagentAbortController,
           });
 
+          this.logger.log(`[Subagent ${subagentRequestId}] STARTED task execution using model: "${subagentModel}" (Parent: ${parentRequestId})`);
+          this.logger.log(`[Subagent ${subagentRequestId}] INPUT RECEIVED: "${args.task}"`);
+
+          const startTime = Date.now();
           try {
             const subagentRequest: ChatCompletionRequest = {
               model: subagentModel,
               messages: [
                 {
                   role: 'system',
-                  content: 'You are a helpful local sub-agent. You have access to filesystem tools and command execution to solve the task. Perform the requested task directly and output the final result.'
+                  content: loadPromptTemplate('subagent_system.txt')
                 },
                 {
                   role: 'user',
@@ -124,13 +130,20 @@ export class RouterService implements OnModuleInit {
 
             const routeResult = await this.route(subagentRequest);
             finalResultContent = routeResult.response.data?.choices?.[0]?.message?.content || 'No response from subagent';
+            
+            const duration = Date.now() - startTime;
+            this.logger.log(`[Subagent ${subagentRequestId}] COMPLETED successfully in ${duration}ms (Model: ${subagentModel})`);
+            const outputText = finalResultContent || 'No response content';
+            this.logger.log(`[Subagent ${subagentRequestId}] OUTPUT RETURNED: "${outputText.slice(0, 300)}${outputText.length > 300 ? '...' : ''}"`);
+            
             this.observability.updateSubagentTaskStatus(subagentRequestId, 'completed');
             if (parentSignal) {
               parentSignal.removeEventListener('abort', abortHandler);
             }
             break;
           } catch (err: any) {
-            this.logger.warn(`Subagent ${subagentModel} failed for task: ${err.message}`);
+            const duration = Date.now() - startTime;
+            this.logger.warn(`[Subagent ${subagentRequestId}] FAILED in ${duration}ms (Model: ${subagentModel}). Error: "${err.message}"`);
             lastError = err;
             this.observability.updateSubagentTaskStatus(subagentRequestId, 'failed');
             if (parentSignal) {
@@ -141,7 +154,7 @@ export class RouterService implements OnModuleInit {
 
         // Self-fallback
         if (finalResultContent === null) {
-          this.logger.warn(`All configured subagents failed. Falling back to isolated self-assignment on orchestrator.`);
+          this.logger.warn(`[Orchestrator ${parentRequestId}] All candidate subagents failed. Falling back to isolated self-assignment.`);
           
           const requestModel = context && (context as any).request?.model;
           const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
@@ -168,13 +181,16 @@ export class RouterService implements OnModuleInit {
             abortController: selfAbortController,
           });
 
+          this.logger.log(`[Orchestrator ${parentRequestId}] Self-fallback execution ${selfRequestId} STARTED on orchestrator model: "${orchestratorModelKey}"`);
+
+          const startTime = Date.now();
           try {
             const selfRequest: ChatCompletionRequest = {
               model: orchestratorModelKey,
               messages: [
                 {
                   role: 'system',
-                  content: 'You are the orchestrator model running in isolated self-fallback. Solve the task directly.'
+                  content: loadPromptTemplate('self_fallback_system.txt')
                 },
                 {
                   role: 'user',
@@ -189,12 +205,19 @@ export class RouterService implements OnModuleInit {
 
             const routeResult = await this.route(selfRequest);
             finalResultContent = routeResult.response.data?.choices?.[0]?.message?.content || 'No response from self-fallback';
+            
+            const duration = Date.now() - startTime;
+            this.logger.log(`[Orchestrator ${parentRequestId}] Self-fallback execution ${selfRequestId} COMPLETED successfully in ${duration}ms`);
+            const selfOutput = finalResultContent || 'No response content';
+            this.logger.log(`[Orchestrator ${parentRequestId}] Self-fallback OUTPUT: "${selfOutput.slice(0, 300)}${selfOutput.length > 300 ? '...' : ''}"`);
+            
             this.observability.updateSubagentTaskStatus(selfRequestId, 'completed');
             if (parentSignal) {
               parentSignal.removeEventListener('abort', abortHandler);
             }
           } catch (err: any) {
-            this.logger.error(`Self-fallback on orchestrator failed: ${err.message}`);
+            const duration = Date.now() - startTime;
+            this.logger.error(`[Orchestrator ${parentRequestId}] Self-fallback execution ${selfRequestId} FAILED in ${duration}ms. Error: "${err.message}"`);
             this.observability.updateSubagentTaskStatus(selfRequestId, 'failed');
             if (parentSignal) {
               parentSignal.removeEventListener('abort', abortHandler);
@@ -212,6 +235,33 @@ export class RouterService implements OnModuleInit {
   }
 
   async route(request: ChatCompletionRequest): Promise<RouteResult> {
+    const result = await this.routeInternal(request);
+
+    // Inject executed tool calls and delegation status into response extra_content
+    const toolCalls = result.metadata.toolCalls;
+    if (
+      result.response.data &&
+      result.response.data.choices &&
+      result.response.data.choices[0] &&
+      result.response.data.choices[0].message
+    ) {
+      const msg = result.response.data.choices[0].message;
+      if (!msg.extra_content) {
+        msg.extra_content = {};
+      }
+      if (toolCalls && toolCalls.length > 0) {
+        msg.extra_content.tool_calls = toolCalls;
+        const delegated = toolCalls.some((tc) => tc.name === 'delegate_subagent');
+        if (delegated) {
+          msg.extra_content.delegated = true;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  async routeInternal(request: ChatCompletionRequest): Promise<RouteResult> {
     request.requestId = request.requestId || `req_${randomUUID().slice(0, 8)}`;
 
     if (this.translationService.isEnabled()) {
@@ -546,6 +596,9 @@ export class RouterService implements OnModuleInit {
     modelName: string,
     providersConfig: Record<string, any>,
   ): { key: string; config: any } | null {
+    if (providersConfig[modelName]) {
+      return { key: modelName, config: providersConfig[modelName] };
+    }
     for (const [key, config] of Object.entries(providersConfig)) {
       if (config.model === modelName) {
         return { key, config };
@@ -612,13 +665,31 @@ export class RouterService implements OnModuleInit {
       throw new Error(`Orchestrator provider "${pair.orchestrator}" not found for pair "${pair.name}"`);
     }
 
-    if (!request.tools) {
-      request.tools = [];
+    // Orchestrator should only have access to delegate_subagent tool
+    request.tools = [this.getDelegationToolDefinition()];
+
+    // Inject strict system prompt for orchestrator to force delegation
+    const systemInstruction = loadPromptTemplate('orchestrator_delegate.txt');
+    const systemMsg = request.messages.find(m => m.role === 'system');
+    if (systemMsg) {
+      systemMsg.content = `${systemMsg.content || ''}\n\n${systemInstruction}`;
+    } else {
+      request.messages.unshift({
+        role: 'system',
+        content: systemInstruction
+      });
     }
-    const hasTool = request.tools.some((t) => t.function.name === 'delegate_subagent');
-    if (!hasTool) {
-      request.tools.push(this.getDelegationToolDefinition());
+
+    // Force delegation on the first call using 'required' (widely supported string value)
+    if (!request.tool_choice) {
+      request.tool_choice = 'required';
     }
+
+    this.logger.log(
+      `[Orchestrator ${request.requestId}] STARTED request: model="${request.model}", ` +
+      `orchestrator="${pair.orchestrator}" (${orchestratorConfig.model}), ` +
+      `prompt="${this.lastUserMessage(request.messages).slice(0, 150)}..."`
+    );
 
     this.logger.log(
       `Orchestrator pair "${pair.name}": using orchestrator ${pair.orchestrator} (${orchestratorConfig.model})`,
