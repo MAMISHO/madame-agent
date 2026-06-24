@@ -25,6 +25,7 @@ export interface RouteMetadata {
   originalTokens: number;
   finalTokens: number;
   toolCalls?: ToolCallRecord[];
+  outputTokens?: number;
 }
 
 export interface RouteResult {
@@ -235,30 +236,83 @@ export class RouterService implements OnModuleInit {
   }
 
   async route(request: ChatCompletionRequest): Promise<RouteResult> {
-    const result = await this.routeInternal(request);
+    const startTime = Date.now();
+    const isSubagent = !!request.parentRequestId;
+    try {
+      const result = await this.routeInternal(request);
+      const latencyMs = Date.now() - startTime;
 
-    // Inject executed tool calls and delegation status into response extra_content
-    const toolCalls = result.metadata.toolCalls;
-    if (
-      result.response.data &&
-      result.response.data.choices &&
-      result.response.data.choices[0] &&
-      result.response.data.choices[0].message
-    ) {
-      const msg = result.response.data.choices[0].message;
-      if (!msg.extra_content) {
-        msg.extra_content = {};
-      }
-      if (toolCalls && toolCalls.length > 0) {
-        msg.extra_content.tool_calls = toolCalls;
-        const delegated = toolCalls.some((tc) => tc.name === 'delegate_subagent');
-        if (delegated) {
-          msg.extra_content.delegated = true;
+      // Inject executed tool calls and delegation status into response extra_content
+      const toolCalls = result.metadata.toolCalls;
+      if (
+        result.response.data &&
+        result.response.data.choices &&
+        result.response.data.choices[0] &&
+        result.response.data.choices[0].message
+      ) {
+        const msg = result.response.data.choices[0].message;
+        if (!msg.extra_content) {
+          msg.extra_content = {};
+        }
+        if (toolCalls && toolCalls.length > 0) {
+          msg.extra_content.tool_calls = toolCalls;
+          const delegated = toolCalls.some((tc) => tc.name === 'delegate_subagent');
+          if (delegated) {
+            msg.extra_content.delegated = true;
+          }
         }
       }
-    }
 
-    return result;
+      if (isSubagent) {
+        this.observability.trackRequest({
+          requestId: request.requestId || '',
+          timestamp: new Date(),
+          latencyMs,
+          routing: {
+            requestId: request.requestId || '',
+            mode: result.metadata.mode,
+            classifierMode: result.metadata.classifierMode,
+            confidence: result.metadata.confidence,
+            escalated: result.metadata.escalated,
+            providerKey: result.metadata.providerKey,
+            providerType: result.metadata.providerType,
+            model: result.metadata.model,
+            parentRequestId: request.parentRequestId,
+          },
+          originalTokens: result.metadata.originalTokens,
+          finalTokens: result.metadata.finalTokens,
+          dedupRemoved: result.metadata.originalTokens - result.metadata.finalTokens,
+          success: true,
+          outputTokens: result.response.data?.usage?.completion_tokens || 0,
+        });
+      }
+
+      return result;
+    } catch (error: any) {
+      if (isSubagent) {
+        const latencyMs = Date.now() - startTime;
+        this.observability.trackRequest({
+          requestId: request.requestId || '',
+          timestamp: new Date(),
+          latencyMs,
+          routing: {
+            requestId: request.requestId || '',
+            mode: 'direct',
+            escalated: false,
+            providerKey: 'unknown',
+            providerType: 'unknown',
+            model: request.model || 'unknown',
+            parentRequestId: request.parentRequestId,
+          },
+          originalTokens: 0,
+          finalTokens: 0,
+          dedupRemoved: 0,
+          success: false,
+          errorMessage: error.message,
+        });
+      }
+      throw error;
+    }
   }
 
   async routeInternal(request: ChatCompletionRequest): Promise<RouteResult> {
@@ -271,6 +325,20 @@ export class RouterService implements OnModuleInit {
     const providersConfig = this.configService.get('providers') || {};
     const modelPairs = this.configService.get('model_pairs') || [];
     const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
+
+    // --- Virtual Models Interception ---
+    if (request.model === 'madame-auto') {
+      // Force classifier/confidence routing
+      request.model = undefined;
+    } else if (request.model === 'madame-local-only') {
+       // Force local routing by finding the default local subagent
+       const defaultLocal = this.configService.get('routing.subagent.providers')?.[0] || 'local_medium';
+       request.model = defaultLocal;
+    } else if (request.model?.startsWith('madame-orchestrator-')) {
+       // Force orchestrator routing
+       request.model = request.model.replace('madame-orchestrator-', '');
+    }
+    // -----------------------------------
 
     // 0. Orchestrator routing: if model matches a named orchestrator pair
     if (request.model) {
@@ -536,7 +604,9 @@ export class RouterService implements OnModuleInit {
     metadata: RouteMetadata,
   ): Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[] }> {
     try {
-      return await task();
+      const result = await task();
+      metadata.outputTokens = result.response.data?.usage?.completion_tokens || 0;
+      return result;
     } catch (error) {
       throw Object.assign(error, { routingMetadata: metadata });
     }

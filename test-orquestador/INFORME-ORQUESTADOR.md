@@ -1,49 +1,52 @@
 # Prueba: Orquestador-Subagente — Deepseek + Gemini
 
-**Fecha**: 2026-06-23 23:31:03 UTC
+**Fecha**: 2026-06-24 21:49:15 UTC
 **Task**: Listar .py, leer el más pequeño, resumir
 
 ## Resumen
 
 | Par | Tipo | Provider | Latencia | Output chars | Delegó |
 |---|---|---|---|---|---|
-| DeepseekV4Flash-Orchestrator+Gemma4-12B       | Deepseek (directo)   | NVIDIA Cloud    |    93.1s | 1339 | ✅ |
-| DeepseekV4Flash-Orchestrator+Gemma4-Deepseek- | Deepseek (hibrido pair) | NVIDIA Cloud    |    70.6s | 1114 | ✅ |
-| Gemini-Orchestrator+Gemma12B-OC               | Gemini (directo)     | Google Gemini   |   124.1s |  415 | ✅ |
-| Gemini-Orchestrator+Gemma-Gemini-Hybrid       | Gemini (hibrido pair) | Google Gemini   |    28.6s |  621 | ✅ |
+| DeepseekV4Flash-Orchestrator+Gemma4-12B       | Deepseek (directo)   |                 |    28.7s |    0 | ❌ | ({"error":{"message":"Cloud API returned 429: {\"st)
+| DeepseekV4Flash-Orchestrator+Gemma4-Deepseek- | Deepseek (hibrido pair) |                 |    28.6s |    0 | ❌ | ({"error":{"message":"Cloud API returned 429: {\"st)
+| Gemini-Orchestrator+Gemma12B-OC               | Gemini (directo)     | Google Gemini   |   101.5s |  539 | ✅ |
+| Gemini-Orchestrator+Gemma-Gemini-Hybrid       | Gemini (hibrido pair) | Google Gemini   |     6.7s |  587 | ✅ |
 
 
 ## Métricas del servidor
 
 ```json
 {
-  "uptime": 740,
+  "uptime": 184,
   "requests": {
-    "total": 5,
+    "total": 7,
     "byProvider": {
-      "local_gemma_oc": 1,
+      "local_gemma_oc": 2,
       "cloud_nvidia_deepseek": 2,
-      "cloud_google": 2
+      "cloud_google": 3
     },
     "byMode": {
-      "direct": 1,
-      "orchestrator": 4
+      "direct": 2,
+      "orchestrator": 4,
+      "classifier": 1
     }
   },
   "escalations": {
-    "total": 0,
-    "rate": 0
+    "total": 1,
+    "rate": 0.14285714285714285
   },
   "tokens": {
-    "inputTotal": 1081,
+    "inputTotal": 779,
     "savedByContext": 0
   },
   "latency": {
-    "avgMs": 64958
+    "avgMs": 30775
   },
   "errors": {
-    "total": 0,
-    "byProvider": {}
+    "total": 2,
+    "byProvider": {
+      "cloud_nvidia_deepseek": 2
+    }
   }
 }
 ```
