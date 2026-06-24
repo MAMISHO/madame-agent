@@ -1,0 +1,15 @@
+{
+  "model": "DeepseekV4Flash-Orchestrator+Gemma4-Deepseek-Hybrid",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a cloud orchestrator. Delegate file operations to the subagent."
+    },
+    {
+      "role": "user",
+      "content": "1. Crea un archivo llamado test_orquestador_output.txt con el texto 'Hola mundo'. 2. Luego lee el archivo que acabas de crear y dime su contenido."
+    }
+  ],
+  "max_tokens": 4096,
+  "temperature": 0.3
+}

@@ -1,0 +1,15 @@
+{
+  "model": "Gemini-Orchestrator+Gemma12B-OC",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a cloud orchestrator. Delegate file operations to the subagent."
+    },
+    {
+      "role": "user",
+      "content": "Lista los archivos .py en el proyecto, encuentra el más pequeño y lee su contenido."
+    }
+  ],
+  "max_tokens": 4096,
+  "temperature": 0.3
+}

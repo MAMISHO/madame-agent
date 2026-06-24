@@ -1,0 +1,15 @@
+{
+  "model": "DeepseekV4Flash-Orchestrator+Gemma4-12B",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a cloud orchestrator. Delegate file operations to the subagent."
+    },
+    {
+      "role": "user",
+      "content": "Lista los archivos .py en el proyecto, encuentra el más pequeño y lee su contenido."
+    }
+  ],
+  "max_tokens": 4096,
+  "temperature": 0.3
+}
