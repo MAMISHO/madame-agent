@@ -430,3 +430,54 @@ opencode.json ──→ opencode
 | 6 | Graceful shutdown (SIGTERM handler) | `src/main.ts` | Media |
 | 7 | opencode: MadameManager (child process) | opencode repo | Alta |
 | 8 | opencode: idle timeout + auto-kill | opencode repo | Media |
+
+---
+
+## 7. Configuración Real e Integración Final (Modo Proxy Transparente Standalone)
+
+Debido a que OpenCode es un proyecto independiente y no es modificable directamente, el servidor de `madame-agent` se ejecuta como un **Proxy Transparente Standalone** que actúa como un endpoint compatible con la API de OpenAI.
+
+### Paso 1: Levantar Madame-Agent
+El servidor corre de manera independiente en el puerto configurado en el archivo `.env` (por defecto `3001`):
+```bash
+npm run start:dev
+```
+
+### Paso 2: Configuración del proveedor en `opencode.json`
+Para integrar Madame-Agent, edita el archivo de configuración `opencode.json` de tu cliente de OpenCode para agregar `madame` como un proveedor personalizado del tipo `openai`:
+
+```json
+{
+  "providers": {
+    "madame": {
+      "api_type": "openai",
+      "api_base": "http://localhost:3001/v1",
+      "api_key": "dummy-key-not-required",
+      "models": [
+        "madame-auto",
+        "madame-local-only",
+        "DeepseekV4Flash-Orchestrator+Gemma4-12B",
+        "DeepseekV4Flash-Orchestrator+Gemma4-Deepseek-Hybrid",
+        "Gemini-Orchestrator+Gemma12B-OC",
+        "Gemini-Orchestrator+Gemma-Gemini-Hybrid"
+      ]
+    }
+  }
+}
+```
+
+### Paso 3: Selección de Modelos Virtuales en OpenCode
+Una vez configurado, OpenCode obtendrá los modelos disponibles dinámicamente mediante el endpoint `/v1/models`. El usuario podrá seleccionar en la interfaz de chat cualquiera de los siguientes modelos virtuales:
+
+1. **`madame-auto`**: Enruta dinámicamente usando el clasificador automático local (decide si delegar a la nube o resolver localmente según la complejidad).
+2. **`madame-local-only`**: Fuerza que la petición sea ejecutada únicamente por los modelos locales configurados en Ollama.
+3. **Pares Orquestadores** (ej. `Gemini-Orchestrator+Gemma-Gemini-Hybrid`): Fuerza la delegación usando el par orquestador en nube y subagente local definidos en `routing.yaml`.
+
+### Paso 4: Visualización de Costes y Ahorros de Tokens
+Dado que OpenCode es inmutable y no tiene interfaz para mostrar estadísticas de madame-agent, el cálculo de costes y ahorros se realiza de forma centralizada:
+* **Por Consola**: Al finalizar cada llamada, la consola del servidor imprime un cuadro detallado y síncrono con el desglose de tokens de entrada (In), salida (Out), coste cloud en USD y ahorro estimado en local.
+* **Vía API**: Se puede consultar la salud de los costes acumulados en cualquier momento mediante:
+  ```bash
+  curl http://localhost:3001/v1/costs
+  ```
+
