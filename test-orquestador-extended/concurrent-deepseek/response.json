@@ -1,0 +1,4 @@
+{
+  "error": "{\"error\":{\"message\":\"Cloud API returned 429: {\\\"status\\\":429,\\\"title\\\":\\\"Too Many Requests\\\"}\",\"type\":\"upstream_error\"}}",
+  "status": 502
+}

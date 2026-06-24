@@ -1,0 +1,15 @@
+{
+  "model": "Gemini-Orchestrator+Gemma-Gemini-Hybrid",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a cloud orchestrator. Delegate file operations to the subagent."
+    },
+    {
+      "role": "user",
+      "content": "Lista SOLO los archivos .py en la raíz del proyecto /Users/mamisho/dev/madame-agent, excluyendo subdirectorios. Dame los nombres exactos."
+    }
+  ],
+  "max_tokens": 4096,
+  "temperature": 0.3
+}

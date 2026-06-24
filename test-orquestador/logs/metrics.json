@@ -1,5 +1,5 @@
 {
-  "uptime": 370,
+  "uptime": 740,
   "requests": {
     "total": 5,
     "byProvider": {
@@ -21,7 +21,7 @@
     "savedByContext": 0
   },
   "latency": {
-    "avgMs": 70161
+    "avgMs": 64958
   },
   "errors": {
     "total": 0,

@@ -1,23 +1,23 @@
 # Prueba: Orquestador-Subagente — Deepseek + Gemini
 
-**Fecha**: 2026-06-23 19:26:57 UTC
+**Fecha**: 2026-06-23 23:31:03 UTC
 **Task**: Listar .py, leer el más pequeño, resumir
 
 ## Resumen
 
 | Par | Tipo | Provider | Latencia | Output chars | Delegó |
 |---|---|---|---|---|---|
-| DeepseekV4Flash-Orchestrator+Gemma4-12B       | Deepseek (directo)   | NVIDIA Cloud    |   207.8s | 1491 | ✅ |
-| DeepseekV4Flash-Orchestrator+Gemma4-Deepseek- | Deepseek (hibrido pair) | NVIDIA Cloud    |    29.1s | 1383 | ✅ |
-| Gemini-Orchestrator+Gemma12B-OC               | Gemini (directo)     | Google Gemini   |    95.2s |  526 | ✅ |
-| Gemini-Orchestrator+Gemma-Gemini-Hybrid       | Gemini (hibrido pair) | Google Gemini   |    10.5s |  557 | ✅ |
+| DeepseekV4Flash-Orchestrator+Gemma4-12B       | Deepseek (directo)   | NVIDIA Cloud    |    93.1s | 1339 | ✅ |
+| DeepseekV4Flash-Orchestrator+Gemma4-Deepseek- | Deepseek (hibrido pair) | NVIDIA Cloud    |    70.6s | 1114 | ✅ |
+| Gemini-Orchestrator+Gemma12B-OC               | Gemini (directo)     | Google Gemini   |   124.1s |  415 | ✅ |
+| Gemini-Orchestrator+Gemma-Gemini-Hybrid       | Gemini (hibrido pair) | Google Gemini   |    28.6s |  621 | ✅ |
 
 
 ## Métricas del servidor
 
 ```json
 {
-  "uptime": 370,
+  "uptime": 740,
   "requests": {
     "total": 5,
     "byProvider": {
@@ -39,7 +39,7 @@
     "savedByContext": 0
   },
   "latency": {
-    "avgMs": 70161
+    "avgMs": 64958
   },
   "errors": {
     "total": 0,
