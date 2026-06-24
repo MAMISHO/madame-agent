@@ -1,30 +1,33 @@
 {
-  "uptime": 740,
+  "uptime": 184,
   "requests": {
-    "total": 5,
+    "total": 7,
     "byProvider": {
-      "local_gemma_oc": 1,
+      "local_gemma_oc": 2,
       "cloud_nvidia_deepseek": 2,
-      "cloud_google": 2
+      "cloud_google": 3
     },
     "byMode": {
-      "direct": 1,
-      "orchestrator": 4
+      "direct": 2,
+      "orchestrator": 4,
+      "classifier": 1
     }
   },
   "escalations": {
-    "total": 0,
-    "rate": 0
+    "total": 1,
+    "rate": 0.14285714285714285
   },
   "tokens": {
-    "inputTotal": 1081,
+    "inputTotal": 779,
     "savedByContext": 0
   },
   "latency": {
-    "avgMs": 64958
+    "avgMs": 30775
   },
   "errors": {
-    "total": 0,
-    "byProvider": {}
+    "total": 2,
+    "byProvider": {
+      "cloud_nvidia_deepseek": 2
+    }
   }
 }

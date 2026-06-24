@@ -1,12 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ObservabilityService } from './observability.service';
+import { CostTrackerService } from './cost-tracker.service';
 
 describe('ObservabilityService', () => {
   let service: ObservabilityService;
 
   beforeEach(async () => {
+    const mockCostTracker = {
+      trackCost: jest.fn(),
+      getSessionStats: jest.fn().mockReturnValue({
+        cloudInputTokens: 0,
+        cloudOutputTokens: 0,
+        totalCloudUsd: 0,
+        localInputTokens: 0,
+        localOutputTokens: 0,
+        totalSavedUsd: 0,
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ObservabilityService],
+      providers: [
+        ObservabilityService,
+        { provide: CostTrackerService, useValue: mockCostTracker }
+      ],
     }).compile();
 
     service = module.get<ObservabilityService>(ObservabilityService);

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { CostTrackerService } from './cost-tracker.service';
 
 export interface RoutingInfo {
   requestId: string;
@@ -32,6 +33,7 @@ export interface RequestMetrics {
   dedupRemoved: number;
   success: boolean;
   errorMessage?: string;
+  outputTokens?: number;
 }
 
 export interface MetricsSummary {
@@ -75,6 +77,8 @@ export class ObservabilityService {
   private timers = new Map<string, number>();
   private activeSubagents: Map<string, ActiveSubagentTask> = new Map();
 
+  constructor(private costTracker: CostTrackerService) {}
+
   startTimer(requestId: string): void {
     this.timers.set(requestId, Date.now());
   }
@@ -101,6 +105,31 @@ export class ObservabilityService {
         `success=${metrics.success}` +
         (metrics.routing.escalated ? ' [ESCALATED]' : ''),
     );
+
+    // Track costs
+    if (metrics.success) {
+      const isLocal = metrics.routing.providerType === 'ollama';
+      const costEntry = this.costTracker.trackCost({
+        requestId: metrics.requestId,
+        mode: metrics.routing.mode,
+        provider: isLocal ? 'ollama' : metrics.routing.providerKey,
+        model: metrics.routing.model,
+        inputTokens: metrics.finalTokens,
+        outputTokens: metrics.outputTokens || 0,
+        isLocal,
+      });
+
+      // Print Summary in terminal
+      const stats = this.costTracker.getSessionStats();
+      console.log('\n=========================================');
+      console.log('💰 MADAME-AGENT COST SUMMARY (SESSION) 💰');
+      console.log('=========================================');
+      console.log(`☁️  Cloud Tokens Used:  In: ${stats.cloudInputTokens.toLocaleString()}, Out: ${stats.cloudOutputTokens.toLocaleString()}`);
+      console.log(`☁️  Cloud Cost:         $${stats.totalCloudUsd.toFixed(4)}`);
+      console.log(`🏠 Local Tokens Saved: In: ${stats.localInputTokens.toLocaleString()}, Out: ${stats.localOutputTokens.toLocaleString()}`);
+      console.log(`💵 Estimated Savings:  $${stats.totalSavedUsd.toFixed(4)}`);
+      console.log('=========================================\n');
+    }
   }
 
   getMetrics(): MetricsSummary {

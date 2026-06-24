@@ -4,6 +4,7 @@ import { ProxyService } from './proxy.service';
 import { ChatCompletionRequest } from './dto/openai.dto';
 import { ConfigService } from '@nestjs/config';
 import { ObservabilityService } from '../observability/observability.service';
+import { CostTrackerService } from '../observability/cost-tracker.service';
 
 let requestCounter = 0;
 
@@ -15,6 +16,7 @@ export class ProxyController {
     private readonly proxyService: ProxyService,
     private configService: ConfigService,
     private observability: ObservabilityService,
+    private costTracker: CostTrackerService,
   ) {}
 
   @Get('models')
@@ -72,9 +74,32 @@ export class ProxyController {
       new Map(allModels.map((item) => [item.id, item])).values(),
     );
 
+    // Virtual models for execution modes
+    const virtualModels = [
+      {
+        id: 'madame-auto',
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'madame-agent',
+      },
+      {
+        id: 'madame-local-only',
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'madame-agent',
+      },
+    ];
+
+    const orchestratorVirtuals = orchestratorPairs.map((pair: any) => ({
+      id: `madame-orchestrator-${pair.id || pair.name}`,
+      object: 'model',
+      created: Math.floor(Date.now() / 1000),
+      owned_by: 'madame-agent',
+    }));
+
     return {
       object: 'list',
-      data: uniqueAllModels,
+      data: [...uniqueAllModels, ...virtualModels, ...orchestratorVirtuals],
     };
   }
 
@@ -91,6 +116,11 @@ export class ProxyController {
   @Get('metrics')
   getMetrics() {
     return this.observability.getMetrics();
+  }
+
+  @Get('costs')
+  getCosts() {
+    return this.costTracker.getSessionStats();
   }
 
   @Post('chat/completions')
@@ -133,6 +163,7 @@ export class ProxyController {
         finalTokens: metadata.finalTokens,
         dedupRemoved: metadata.originalTokens - metadata.finalTokens,
         success: true,
+        outputTokens: response.data?.usage?.completion_tokens || 0,
       });
 
       if (body.stream && response.stream) {

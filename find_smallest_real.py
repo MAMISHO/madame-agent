@@ -1,7 +1,11 @@
 import os
 import glob
 
-files = glob.glob('/Users/mamisho/dev/madame-agent/**/*.py')
+def get_py_files():
+    # Recursive search for all .py files
+    return glob.glob('/Users/mamisho/dev/madame-agent/**/*.py')
+
+files = get_py_files()
 if not files:
     print("No py files found")
 else:
