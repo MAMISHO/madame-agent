@@ -16,6 +16,7 @@ export class SandboxManagerService {
   private readonly deniedCommands: string[];
   private readonly maxTimeoutMs: number;
   private readonly allowNetwork: boolean;
+  private readonly allowedPaths: string[];
 
   constructor(private configService: ConfigService) {
     const sandboxConfig = this.configService.get('tools.sandbox') || {};
@@ -23,6 +24,7 @@ export class SandboxManagerService {
     this.deniedCommands = sandboxConfig.denied_commands || ['rm', 'sudo', 'curl', 'wget'];
     this.maxTimeoutMs = sandboxConfig.max_timeout_ms || 30_000;
     this.allowNetwork = sandboxConfig.allow_network ?? false;
+    this.allowedPaths = sandboxConfig.allowed_paths || [];
   }
 
   check(toolName: string, args: any): void {
@@ -48,12 +50,20 @@ export class SandboxManagerService {
       }
 
       const resolved = resolve(this.workspace, normalize(value as string));
-      if (!resolved.startsWith(this.workspace + '/') && resolved !== this.workspace) {
+      if (!this.isPathAllowed(resolved)) {
         throw new SandboxViolationError(
-          `Path '${value}' resolves to '${resolved}' which is outside the allowed workspace '${this.workspace}'`,
+          `Path '${value}' resolves to '${resolved}' which is outside the allowed workspace '${this.workspace}' and not in allowed paths`,
         );
       }
     }
+  }
+
+  private isPathAllowed(resolved: string): boolean {
+    if (resolved.startsWith(this.workspace + '/') || resolved === this.workspace) return true;
+    return this.allowedPaths.some(allowed => {
+      const allowedPath = resolve(allowed.replace(/^~/, process.env.HOME || ''));
+      return resolved.startsWith(allowedPath + '/') || resolved === allowedPath;
+    });
   }
 
   private checkCommand(toolName: string, args: any): void {

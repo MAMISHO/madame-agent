@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { RouterService } from './router.service';
+import { WorkflowService } from './workflow.service';
 import { ProvidersModule } from '../providers/providers.module';
 import { ClassifierModule } from '../classifier/classifier.module';
 import { ConfidenceModule } from '../confidence/confidence.module';
@@ -20,7 +21,7 @@ import { ObservabilityModule } from '../observability/observability.module';
     ToolsModule,
     ObservabilityModule,
   ],
-  providers: [RouterService],
-  exports: [RouterService],
+  providers: [RouterService, WorkflowService],
+  exports: [RouterService, WorkflowService],
 })
 export class RouterModule {}

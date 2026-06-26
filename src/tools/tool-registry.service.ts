@@ -3,7 +3,7 @@ import { ToolDefinition, ChatCompletionRequest } from '../proxy/dto/openai.dto';
 
 export interface ToolHandler {
   definition: ToolDefinition;
-  execute: (args: any, context?: { parentRequestId?: string; parentSignal?: AbortSignal; request?: ChatCompletionRequest }) => Promise<any>;
+  execute: (args: any, context?: { parentRequestId?: string; parentSignal?: AbortSignal; request?: ChatCompletionRequest; executionOptions?: any }) => Promise<any>;
   timeout?: number;
 }
 
@@ -19,7 +19,13 @@ export class ToolRegistryService {
   }
 
   get(name: string): ToolHandler | undefined {
-    return this.tools.get(name);
+    const normalized = name.toLowerCase();
+    for (const [key, value] of this.tools.entries()) {
+      if (key.toLowerCase() === normalized) {
+        return value;
+      }
+    }
+    return undefined;
   }
 
   getDefinitions(): ToolDefinition[] {
@@ -27,7 +33,13 @@ export class ToolRegistryService {
   }
 
   has(name: string): boolean {
-    return this.tools.has(name);
+    const normalized = name.toLowerCase();
+    for (const key of this.tools.keys()) {
+      if (key.toLowerCase() === normalized) {
+        return true;
+      }
+    }
+    return false;
   }
 
   list(): string[] {

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Message } from '../proxy/dto/openai.dto';
-import { loadPromptTemplate } from '../utils/template-loader';
+import { PromptService } from '../prompts/prompt.service';
 
 @Injectable()
 export class TranslationService {
@@ -11,7 +11,10 @@ export class TranslationService {
   private readonly enabled: boolean;
   private readonly targetLang: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private promptService: PromptService,
+  ) {
     this.enabled = this.configService.get<boolean>('translation.enabled', false);
     this.model = this.configService.get<string>('translation.model', 'gemma4:12b-mlx');
     this.baseUrl = this.configService.get<string>('translation.baseUrl', 'http://localhost:11434');
@@ -23,7 +26,7 @@ export class TranslationService {
   }
 
   async detectLanguage(text: string): Promise<string> {
-    const prompt = loadPromptTemplate('detect_language.txt', {
+    const prompt = this.promptService.loadPrompt('detect-language', {
       text: text.slice(0, 500),
     });
 
@@ -43,7 +46,7 @@ export class TranslationService {
 
     this.logger.debug(`Translating from ${sourceLang} → ${targetLang}: "${text.slice(0, 60)}..."`);
 
-    const prompt = loadPromptTemplate('translate_text.txt', {
+    const prompt = this.promptService.loadPrompt('translate-text', {
       sourceLang,
       targetLang,
       text: text.slice(0, 2000),

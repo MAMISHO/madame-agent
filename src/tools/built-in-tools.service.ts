@@ -73,11 +73,62 @@ export class BuiltInToolsService {
           },
         },
       },
-      execute: async (args: { path: string; content: string }) => {
+      execute: async (args: { path: string; content: string }, context?: any) => {
         const dir = resolve(args.path, '..');
         await mkdir(dir, { recursive: true });
-        await writeFile(args.path, args.content, 'utf-8');
-        return { path: args.path, size: args.content.length, status: 'written' };
+        let content = args.content;
+        if (content.includes('\\"')) {
+          if (/import\s+.*from\s+\\"|const\s+.*=\s+\\"|let\s+.*=\s+\\"|var\s+.*=\s+\\"|function\s+.*\(.*\\"/i.test(content)) {
+            content = content.replace(/\\"/g, '"');
+          }
+        }
+
+        const hasDoubleEscapes = (str: string): boolean => {
+          const realNewlines = (str.match(/\n/g) || []).length;
+          const literalNewlines = (str.match(/\\n/g) || []).length;
+          return realNewlines < 3 && literalNewlines > 5;
+        };
+
+        const healContent = (str: string): string => {
+          return str
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\r')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"');
+        };
+
+        const ext = args.path.includes('.') ? args.path.substring(args.path.lastIndexOf('.')) : '';
+        const codeExtensions = ['.ts', '.tsx', '.js', '.jsx', '.php', '.py', '.java', '.go', '.rs', '.cpp', '.h', '.cs', '.rb'];
+
+        if (codeExtensions.includes(ext) && hasDoubleEscapes(content)) {
+          const healed = healContent(content);
+          this.logger.log(`Pre-emptively healed formatting anomalies for: ${args.path}`);
+          content = healed;
+        }
+
+        await writeFile(args.path, content, 'utf-8');
+
+        // Dynamic validator execution based on active validators in context
+        const validators = context?.executionOptions?.validators || [];
+        const validator = validators.find((v: any) => v.ext === ext);
+
+        if (validator) {
+          const cmd = validator.command.replace('{path}', args.path);
+          try {
+            await execAsync(cmd, { cwd: process.cwd() });
+            return { path: args.path, size: content.length, status: 'written', syntax: 'valid' };
+          } catch (err: any) {
+            const output = err.stdout || err.stderr || err.message;
+            return {
+              path: args.path,
+              size: content.length,
+              status: 'written_but_has_syntax_errors',
+              error: output,
+            };
+          }
+        }
+
+        return { path: args.path, size: content.length, status: 'written' };
       },
       timeout: 10_000,
     });
@@ -194,6 +245,14 @@ export class BuiltInToolsService {
     });
   }
 
+  private truncateOutput(str: string): string {
+    const LIMIT = 25000;
+    if (!str || str.length <= LIMIT) {
+      return str;
+    }
+    return str.slice(0, LIMIT) + '\n\n...[OUTPUT TRUNCATED DUE TO EXCESSIVE LENGTH: Use filters, glob_files, or pagination]...';
+  }
+
   private registerExecuteCommand(): void {
     this.register({
       definition: {
@@ -213,8 +272,24 @@ export class BuiltInToolsService {
       },
       execute: async (args: { command: string; timeout?: number }) => {
         const timeout = Math.min(args.timeout ?? 15_000, 30_000);
-        const { stdout, stderr } = await execAsync(args.command, { timeout });
-        return { command: args.command, stdout, stderr, exitCode: stderr ? 1 : 0 };
+        let stdout = '';
+        let stderr = '';
+        let exitCode = 0;
+        try {
+          const res = await execAsync(args.command, { timeout });
+          stdout = res.stdout;
+          stderr = res.stderr;
+        } catch (error: any) {
+          stdout = error.stdout ?? '';
+          stderr = error.stderr ?? error.message ?? '';
+          exitCode = error.code ?? 1;
+        }
+        return {
+          command: args.command,
+          stdout: this.truncateOutput(stdout),
+          stderr: this.truncateOutput(stderr),
+          exitCode,
+        };
       },
       timeout: 30_000,
     });

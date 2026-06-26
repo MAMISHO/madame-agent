@@ -51,4 +51,6 @@ export class ChatCompletionRequest {
   response_format?: any;
   requestId?: string;
   parentRequestId?: string;
+  maxIterations?: number;
+  timeoutMs?: number;
 }

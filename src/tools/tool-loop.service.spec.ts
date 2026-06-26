@@ -9,6 +9,7 @@ import { OllamaProvider } from '../providers/ollama.provider';
 import { CloudProvider } from '../providers/cloud.provider';
 import { HuggingFaceProvider } from '../providers/huggingface.provider';
 import { ChatCompletionRequest, ToolCallRecord } from '../proxy/dto/openai.dto';
+import { ObservabilityService } from '../observability/observability.service';
 
 describe('ToolLoopService', () => {
   let service: ToolLoopService;
@@ -47,6 +48,12 @@ describe('ToolLoopService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ToolLoopService,
+        {
+          provide: ObservabilityService,
+          useValue: {
+            trackRequest: jest.fn(),
+          },
+        },
         {
           provide: ConfigService,
           useValue: {
@@ -229,6 +236,10 @@ describe('ToolLoopService', () => {
       providers: [
         ToolLoopService,
         {
+          provide: ObservabilityService,
+          useValue: { trackRequest: jest.fn() },
+        },
+        {
           provide: ConfigService,
           useValue: {
             get: jest.fn((key: string) => {
@@ -268,6 +279,10 @@ describe('ToolLoopService', () => {
     const zeroModule: TestingModule = await Test.createTestingModule({
       providers: [
         ToolLoopService,
+        {
+          provide: ObservabilityService,
+          useValue: { trackRequest: jest.fn() },
+        },
         {
           provide: ConfigService,
           useValue: {
@@ -559,6 +574,10 @@ describe('ToolLoopService', () => {
       providers: [
         ToolLoopService,
         {
+          provide: ObservabilityService,
+          useValue: { trackRequest: jest.fn() },
+        },
+        {
           provide: ConfigService,
           useValue: {
             get: jest.fn((key: string) => {
@@ -587,5 +606,100 @@ describe('ToolLoopService', () => {
     // Should have aborted and recorded controlled error (not a crash)
     expect(result.errors.length).toBeGreaterThanOrEqual(1);
     expect(result.errors[0]).toContain('aborted');
+  });
+
+  // === NEW: Dynamic Context Truncation, Semantic Block, and Breadcrumbs tests ===
+
+  describe('accumulateGeneratedText dynamic context optimization', () => {
+    it('does not truncate if total text is within calculated budget limit', () => {
+      const generated = ['## Understanding\nSome text', '## Execution\nDone'];
+      const modelConfig = { type: 'ollama', context_limit: 8192 }; // maxChars = 2048 * 4 = 8192
+      const result = (service as any).accumulateGeneratedText(generated, [], modelConfig);
+      expect(result).toBe('## Understanding\nSome text\n\n---\n\n## Execution\nDone');
+    });
+
+    it('preserves ## Understanding and ## Execution blocks semantically using regex', () => {
+      // Setup a text that will definitely exceed maxChars budget
+      // Set context_limit to 100 tokens, which results in maxChars = 25 * 4 = 100 characters.
+      const modelConfig = { type: 'custom', context_limit: 100 }; // maxChars = 100. firstLimit = 40, lastLimit = 50.
+      const generated = [
+        '## Understanding\nThis is a long understanding section that exceeds forty characters.',
+        '## Intermediate block',
+        '## Execution\nThis is a long execution section that exceeds fifty characters.'
+      ];
+
+      const result = (service as any).accumulateGeneratedText(generated, [], modelConfig);
+      
+      // The result should contain the ## Understanding prefix and ## Execution prefix
+      expect(result).toContain('## Understanding');
+      expect(result).toContain('## Execution');
+      expect(result).toContain('Understanding truncated');
+      expect(result).toContain('details truncated');
+    });
+
+    it('generates a breadcrumb trail listing intermediate tools executed', () => {
+      const modelConfig = { type: 'custom', context_limit: 100 };
+      const generated = [
+        '## Understanding\nShort',
+        '## Intermediate turn 1',
+        '## Intermediate turn 2',
+        '## Execution\nShort'
+      ];
+      const toolCallRecords: ToolCallRecord[] = [
+        { name: 'read_file', args: {}, result: {}, latencyMs: 10, iteration: 1 },
+        { name: 'grep_search', args: {}, result: {}, latencyMs: 20, iteration: 2 },
+        { name: 'replace_file_content', args: {}, result: {}, latencyMs: 30, iteration: 3 },
+        { name: 'write_to_file', args: {}, result: {}, latencyMs: 40, iteration: 4 }
+      ];
+
+      const result = (service as any).accumulateGeneratedText(generated, toolCallRecords, modelConfig);
+      
+      // Intermediate iterations are 2 and 3. Tools executed in them: grep_search, replace_file_content.
+      expect(result).toContain('Truncated 2 intermediate assistant turns');
+      expect(result).toContain('Tools executed: grep_search, replace_file_content.');
+    });
+  });
+
+  it('aborts execution with loop detection if tool is called 4 times consecutively with identical arguments', async () => {
+    const toolFn = jest.fn().mockResolvedValue({ content: 'ok' });
+    mockToolRegistry.get.mockReturnValue({
+      definition: {
+        type: 'function',
+        function: { name: 'read_file', description: '', parameters: {} },
+      },
+      execute: toolFn,
+    });
+
+    const mockProvider = {
+      chat: jest.fn().mockResolvedValue(
+        makeResponse([
+          { id: 'call_1', type: 'function', function: { name: 'read_file', arguments: '{"path":"stuck.ts"}' } },
+        ])
+      ),
+    };
+    mockProvidersService.getProvider.mockReturnValue(mockProvider);
+
+    const result = await service.execute(
+      { messages: [{ role: 'user', content: 'loop test' }] } as ChatCompletionRequest,
+      { type: 'ollama', model: 'test-model' },
+      10
+    );
+
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0]).toContain('Loop detected');
+    expect(result.iterations).toBeLessThan(10);
+  });
+
+  it('does not check timeout if timeoutMs is -1', async () => {
+    const mockProvider = { chat: jest.fn().mockResolvedValue(makeResponse()) };
+    mockProvidersService.getProvider.mockReturnValue(mockProvider);
+
+    const result = await service.execute(
+      { messages: [{ role: 'user', content: 'no timeout' }], timeoutMs: -1 } as ChatCompletionRequest,
+      { type: 'ollama', model: 'test-model' }
+    );
+
+    expect(result.errors).toEqual([]);
+    expect(result.iterations).toBe(1);
   });
 });

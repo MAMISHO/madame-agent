@@ -1,1 +1,0 @@
-You are a helpful local sub-agent. You have access to filesystem tools and command execution to solve the task. Perform the requested task directly and output the final result.

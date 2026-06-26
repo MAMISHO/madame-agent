@@ -145,26 +145,30 @@ export class ProxyController {
 
       const latencyMs = this.observability.finishTimer(requestId);
 
-      this.observability.trackRequest({
-        requestId,
-        timestamp: new Date(),
-        latencyMs,
-        routing: {
+      // For orchestrator mode, ToolLoopService already tracks each LLM iteration individually.
+      // We skip tracking here to avoid double-counting the final tokens.
+      if (metadata.mode !== 'orchestrator') {
+        this.observability.trackRequest({
           requestId,
-          mode: metadata.mode,
-          classifierMode: metadata.classifierMode,
-          confidence: metadata.confidence,
-          escalated: metadata.escalated,
-          providerKey: metadata.providerKey,
-          providerType: metadata.providerType,
-          model: metadata.model,
-        },
-        originalTokens: metadata.originalTokens,
-        finalTokens: metadata.finalTokens,
-        dedupRemoved: metadata.originalTokens - metadata.finalTokens,
-        success: true,
-        outputTokens: response.data?.usage?.completion_tokens || 0,
-      });
+          timestamp: new Date(),
+          latencyMs,
+          routing: {
+            requestId,
+            mode: metadata.mode,
+            classifierMode: metadata.classifierMode,
+            confidence: metadata.confidence,
+            escalated: metadata.escalated,
+            providerKey: metadata.providerKey,
+            providerType: metadata.providerType,
+            model: metadata.model,
+          },
+          originalTokens: metadata.originalTokens,
+          finalTokens: metadata.finalTokens,
+          dedupRemoved: metadata.originalTokens - metadata.finalTokens,
+          success: true,
+          outputTokens: response.data?.usage?.completion_tokens || 0,
+        });
+      }
 
       if (body.stream && response.stream) {
         res.setHeader('Content-Type', 'text/event-stream');
