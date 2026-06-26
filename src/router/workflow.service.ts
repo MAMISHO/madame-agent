@@ -265,7 +265,7 @@ export class WorkflowService {
           const execResult = await this.toolLoop.execute(
             executorRequest,
             executorConfig,
-            undefined,
+            5,
             executionOptions,
           );
           const executorOutput = execResult.response.data?.choices?.[0]?.message?.content || 'No output';
@@ -388,9 +388,12 @@ export class WorkflowService {
 
           this.agentLogger.log('Supervisor', `Analysis:\n${supervisorOutput}`, subagentRequestId);
 
-          // Parse Supervisor Override
+          // Parse Supervisor Status and Override
+          const statusMatch = supervisorOutput.match(/Status\s*:\s*(\w+)/i);
+          const isLoopingOrDiverged = statusMatch && ['LOOPING', 'DIVERGED'].includes(statusMatch[1].toUpperCase());
+
           const matchOverride = supervisorOutput.match(/Supervisor Override(?:[\*:\s]+)([\s\S]+)$/i);
-          if (matchOverride && matchOverride[1] && !matchOverride[1].toUpperCase().includes('NONE')) {
+          if (isLoopingOrDiverged && matchOverride && matchOverride[1] && !matchOverride[1].toUpperCase().includes('NONE')) {
             supervisorOverride = matchOverride[1].trim();
           } else {
             supervisorOverride = null;
