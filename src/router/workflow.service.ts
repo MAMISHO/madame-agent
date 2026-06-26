@@ -9,6 +9,7 @@ import { ToolRegistryService } from '../tools/tool-registry.service';
 import { ToolLoopService } from '../tools/tool-loop.service';
 import { SkillManagerService } from '../tools/skill-manager.service';
 import { SkillScraperService } from '../tools/skill-scraper.service';
+import { ValidatorService } from '../tools/validator.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
@@ -41,6 +42,7 @@ export class WorkflowService {
     private skillManager: SkillManagerService,
     private skillScraper: SkillScraperService,
     private observability: ObservabilityService,
+    private validatorService: ValidatorService,
   ) {}
 
   async executeWorkflow(
@@ -59,8 +61,10 @@ export class WorkflowService {
       throw new Error(`Orchestrator provider "${pair.orchestrator}" not found for pair "${pair.name}"`);
     }
 
+    let preparerText = '';
+
     // 1. Register Custom Executor/QA delegate_subagent tool
-    this.registerCustomDelegationTool(pair, parentRequestId);
+    this.registerCustomDelegationTool(pair, parentRequestId, () => preparerText);
 
     // 2. Environment Preparer Agent (Cloud)
     this.agentLogger.log('Preparer', 'Verifying environment and configuring context...', parentRequestId);
@@ -79,7 +83,7 @@ export class WorkflowService {
       parentRequestId,
     };
     const preparerResult = await this.toolLoop.execute(preparerRequest, orchestratorConfig);
-    const preparerText = preparerResult.response.data?.choices?.[0]?.message?.content || 'Environment ready';
+    preparerText = preparerResult.response.data?.choices?.[0]?.message?.content || 'Environment ready';
     
     this.agentLogger.log('Preparer', `Environment Report:\n${preparerText.slice(0, 200)}...`, parentRequestId);
 
@@ -155,7 +159,8 @@ export class WorkflowService {
 
   private registerCustomDelegationTool(
     pair: { id: string; name: string; orchestrator: string; subagents: string[] },
-    parentRequestId: string
+    parentRequestId: string,
+    getPreparerText: () => string
   ) {
     const providersConfig = this.configService.get('providers') || {};
     const orchestratorConfig = providersConfig[pair.orchestrator];
@@ -254,16 +259,7 @@ export class WorkflowService {
 
           // Run Executor using the ToolLoopService
           const executionOptions = {
-            validators: [
-              {
-                ext: '.ts',
-                command: 'npx tsc --noEmit --skipLibCheck --jsx react-jsx "{path}"',
-              },
-              {
-                ext: '.tsx',
-                command: 'npx tsc --noEmit --skipLibCheck --jsx react-jsx "{path}"',
-              },
-            ],
+            validators: this.validatorService.getValidatorsForEnvironment(getPreparerText()),
           };
 
           const execStart = Date.now();
@@ -291,10 +287,11 @@ export class WorkflowService {
           // 2. Build QA Prompt
           this.agentLogger.log('QA', 'Starting compilation and type check verification...', subagentRequestId);
           
-          // Run global tsc check to find project-wide typescript issues
-          let tscReport = 'TypeScript type checking passed cleanly.';
+          // Run global tsc and linting check to find project-wide typescript issues
+          let tscReport = 'TypeScript type checking and linting passed cleanly.';
+          const globalCommand = this.validatorService.getGlobalCheckCommand(getPreparerText());
           try {
-            await execAsync('npx tsc --noEmit --skipLibCheck --jsx react-jsx', { cwd: process.cwd() });
+            await execAsync(globalCommand, { cwd: process.cwd() });
           } catch (err: any) {
             tscReport = err.stdout || err.stderr || err.message;
           }
