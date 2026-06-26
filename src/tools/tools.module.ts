@@ -5,6 +5,7 @@ import { SandboxManagerService } from './sandbox-manager.service';
 import { ToolLoopService } from './tool-loop.service';
 import { SkillManagerService } from './skill-manager.service';
 import { SkillScraperService } from './skill-scraper.service';
+import { ValidatorService } from './validator.service';
 import { ProvidersModule } from '../providers/providers.module';
 import { ObservabilityModule } from '../observability/observability.module';
 
@@ -17,6 +18,7 @@ import { ObservabilityModule } from '../observability/observability.module';
     ToolLoopService,
     SkillManagerService,
     SkillScraperService,
+    ValidatorService,
   ],
   exports: [
     ToolRegistryService,
@@ -24,6 +26,7 @@ import { ObservabilityModule } from '../observability/observability.module';
     ToolLoopService,
     SkillManagerService,
     SkillScraperService,
+    ValidatorService,
   ],
 })
 export class ToolsModule {}
