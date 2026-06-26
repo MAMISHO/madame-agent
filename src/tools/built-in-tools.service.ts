@@ -84,9 +84,8 @@ export class BuiltInToolsService {
         }
 
         const hasDoubleEscapes = (str: string): boolean => {
-          const realNewlines = (str.match(/\n/g) || []).length;
           const literalNewlines = (str.match(/\\n/g) || []).length;
-          return realNewlines < 3 && literalNewlines > 5;
+          return literalNewlines > 3;
         };
 
         const healContent = (str: string): string => {
