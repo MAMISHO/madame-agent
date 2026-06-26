@@ -14,6 +14,8 @@ Output format:
 ## QA Evaluation
 - **Status**: [APPROVED | REJECTED]
 - **Type Checking / Compilation**: [PASSED | FAILED | NOT_APPLICABLE]
+- **Working Memory Update**: [A brief, single-line summary of key facts/paths/contents discovered or written by the Executor in this iteration (e.g. "Found server.ts at src/server.ts"). If no new information was discovered, output 'None']
 - **Errors Detected**: [List specific errors, files, and line numbers, or 'None']
 - **Comments/Feedback**: [Detailed feedback for correction]
 ```
+

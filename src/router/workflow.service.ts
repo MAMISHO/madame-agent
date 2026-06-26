@@ -203,6 +203,7 @@ export class WorkflowService {
         const telemetryHistory: TelemetryEntry[] = [];
         let supervisorOverride: string | null = null;
         let activeSkills = args.skills || [];
+        let accumulatedWorkingMemory = '';
 
         // Max local subagent execution/QA loop budget (defaults to 5)
         const maxSubIterations = args.max_iterations || 5;
@@ -230,6 +231,10 @@ export class WorkflowService {
           }
 
           let executorInput = `Task: ${args.task}`;
+          if (iteration > 1) {
+            const lastFeedback = telemetryHistory[telemetryHistory.length - 1]?.qaFeedback || 'REJECTED';
+            executorInput = `[QA FEEDBACK FROM PREVIOUS ITERATION]\nStatus: REJECTED\nFeedback:\n${lastFeedback}\n\n[ACCUMULATED WORKING MEMORY]\n${accumulatedWorkingMemory || 'None'}\n\nDO NOT repeat actions you have already successfully completed. Use the working memory above to proceed.\n\n${executorInput}`;
+          }
           if (supervisorOverride) {
             executorInput = `[SUPERVISOR OVERRIDE ALERT]\n${supervisorOverride}\n\n${executorInput}`;
             this.agentLogger.log('Executor', `Applying supervisor override instruction.`, subagentRequestId);
@@ -364,6 +369,19 @@ export class WorkflowService {
           // Parse QA status (APPROVED vs REJECTED)
           const isApproved = qaFeedback.toUpperCase().includes('APPROVED') && !qaFeedback.toUpperCase().includes('REJECTED');
           const qaStatus = isApproved ? 'APPROVED' as const : 'REJECTED' as const;
+
+          // Extract Working Memory Update
+          let workingMemoryUpdate = '';
+          const wmMatch = qaFeedback.match(/(?:-\s*\*\*)?Working Memory Update\*\*?:\s*([^\r\n]+)/i);
+          if (wmMatch && wmMatch[1]) {
+            const val = wmMatch[1].trim();
+            if (val.toLowerCase() !== 'none' && val.toLowerCase() !== '[none]' && val !== '') {
+              workingMemoryUpdate = val;
+            }
+          }
+          if (workingMemoryUpdate) {
+            accumulatedWorkingMemory += `- Iteration ${iteration}: ${workingMemoryUpdate}\n`;
+          }
 
           this.agentLogger.log('QA', `Verification complete. Status: ${qaStatus}. Feedback:\n${qaFeedback}`, subagentRequestId);
 
