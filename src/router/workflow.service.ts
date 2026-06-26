@@ -325,6 +325,24 @@ export class WorkflowService {
             }
           }
 
+          let toolCallsReport = '';
+          if (execResult.toolCalls && execResult.toolCalls.length > 0) {
+            toolCallsReport += '\n\n[Llamadas a Herramientas y Resultados en esta iteración]\n';
+            for (const tc of execResult.toolCalls) {
+              toolCallsReport += `\n--- Herramienta: ${tc.name} ---\n`;
+              toolCallsReport += `Args: ${JSON.stringify(tc.args)}\n`;
+              if (tc.result) {
+                if (tc.name === 'execute_command') {
+                  toolCallsReport += `Exit Code: ${tc.result.exitCode}\n`;
+                  if (tc.result.stdout) toolCallsReport += `Stdout:\n${tc.result.stdout}\n`;
+                  if (tc.result.stderr) toolCallsReport += `Stderr:\n${tc.result.stderr}\n`;
+                } else {
+                  toolCallsReport += `Resultado:\n${typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result, null, 2)}\n`;
+                }
+              }
+            }
+          }
+
           const qaSystemPrompt = this.promptService.loadPrompt('qa');
           const qaRequest: ChatCompletionRequest = {
             model: qaModel,
@@ -332,7 +350,7 @@ export class WorkflowService {
               { role: 'system', content: qaSystemPrompt },
               { 
                 role: 'user', 
-                content: `Task: ${args.task}\n\nExecutor Output:\n${executorOutput}\n\nTypeScript Compiler / Build Report:\n${tscReport}${modifiedFilesReport}` 
+                content: `Task: ${args.task}\n\nExecutor Output:\n${executorOutput}\n\nTypeScript Compiler / Build Report:\n${tscReport}${modifiedFilesReport}${toolCallsReport}` 
               },
             ],
             requestId: `${subagentRequestId}_qa_${iteration}`,
