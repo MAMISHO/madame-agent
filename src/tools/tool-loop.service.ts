@@ -16,6 +16,13 @@ export interface ToolLoopResult {
   toolCalls: ToolCallRecord[];
 }
 
+export class FatalToolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FatalToolError';
+  }
+}
+
 const MAX_CACHE_ENTRIES = 100;
 
 @Injectable()
@@ -256,6 +263,9 @@ export class ToolLoopService {
             content: JSON.stringify(result),
           });
         } catch (err: any) {
+          if (err instanceof FatalToolError || err.name === 'FatalToolError' || err.isFatal) {
+            throw err;
+          }
           const latencyMs = Date.now() - toolStart;
           const errMsg = `Tool '${toolName}': ${err.message}`;
           errors.push(errMsg);

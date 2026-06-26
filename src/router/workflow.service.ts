@@ -6,7 +6,7 @@ import { ProvidersService } from '../providers/providers.service';
 import { PromptService } from '../prompts/prompt.service';
 import { AgentLoggerService } from '../utils/agent-logger.service';
 import { ToolRegistryService } from '../tools/tool-registry.service';
-import { ToolLoopService } from '../tools/tool-loop.service';
+import { ToolLoopService, FatalToolError } from '../tools/tool-loop.service';
 import { SkillManagerService } from '../tools/skill-manager.service';
 import { SkillScraperService } from '../tools/skill-scraper.service';
 import { ValidatorService } from '../tools/validator.service';
@@ -135,26 +135,57 @@ export class WorkflowService {
     // Run the orchestrator using ToolLoopService
     this.agentLogger.log('Orchestrator', `Executing orchestrator model: "${pair.orchestrator}"`, parentRequestId);
     const startMs = Date.now();
-    const result = await this.toolLoop.execute(orchestratorRequest, orchestratorConfig);
-    const endMs = Date.now() - startMs;
+    try {
+      const result = await this.toolLoop.execute(orchestratorRequest, orchestratorConfig);
+      const endMs = Date.now() - startMs;
 
-    this.agentLogger.log('System', `Workflow completed in ${endMs}ms`, parentRequestId);
+      this.agentLogger.log('System', `Workflow completed in ${endMs}ms`, parentRequestId);
 
-    return {
-      response: result.response,
-      metadata: {
-        mode: 'orchestrator',
-        escalated: false,
-        providerKey: pair.orchestrator,
-        providerType: orchestratorConfig.type,
-        model: orchestratorConfig.model,
-        originalTokens: Math.ceil(JSON.stringify(request.messages).length / 3.5),
-        finalTokens: Math.ceil(JSON.stringify(orchestratorRequest.messages).length / 3.5),
-        iterations: result.iterations,
-        toolCalls: result.toolCalls,
-        toolErrors: result.errors,
-      },
-    };
+      return {
+        response: result.response,
+        metadata: {
+          mode: 'orchestrator',
+          escalated: false,
+          providerKey: pair.orchestrator,
+          providerType: orchestratorConfig.type,
+          model: orchestratorConfig.model,
+          originalTokens: Math.ceil(JSON.stringify(request.messages).length / 3.5),
+          finalTokens: Math.ceil(JSON.stringify(orchestratorRequest.messages).length / 3.5),
+          iterations: result.iterations,
+          toolCalls: result.toolCalls,
+          toolErrors: result.errors,
+        },
+      };
+    } catch (err: any) {
+      const endMs = Date.now() - startMs;
+      this.agentLogger.error('System', `Workflow aborted due to fatal error after ${endMs}ms: ${err.message}`, parentRequestId);
+      return {
+        response: {
+          data: {
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: `⚠️ **[ERROR DE INFRAESTRUCTURA]** La tarea no pudo completarse debido a un fallo crítico en la comunicación con el proveedor de IA (${orchestratorConfig?.model || 'LLM'}):\n\n\`\`\`\n${err.message}\n\`\`\`\n\nPor favor, comprueba que los servicios locales (como Ollama) estén activos o que la conexión a internet sea estable e inténtalo de nuevo.`,
+                },
+              },
+            ],
+          },
+        } as any,
+        metadata: {
+          mode: 'orchestrator',
+          escalated: false,
+          providerKey: pair.orchestrator,
+          providerType: orchestratorConfig.type,
+          model: orchestratorConfig.model,
+          originalTokens: 0,
+          finalTokens: 0,
+          iterations: 0,
+          toolCalls: [],
+          toolErrors: [err.message],
+        },
+      };
+    }
   }
 
   private registerCustomDelegationTool(
@@ -218,245 +249,246 @@ export class WorkflowService {
             throw new Error('Parent execution aborted');
           }
 
-          this.agentLogger.log('Executor', `Iteration ${iteration}/${maxSubIterations} starting...`, subagentRequestId);
-
-          // 1. Build Executor Prompt
-          let executorSystemContent = this.promptService.loadPrompt('executor');
-          if (supervisorOverride) {
-            executorSystemContent += `\n\n=== CRITICAL SUPERVISOR OVERRIDE ===\nThe Transversal Supervisor has issued a mandatory override instruction. You MUST obey this override immediately and prioritize it over other rules.\nOverride Instruction: ${supervisorOverride}\n\n`;
-          }
-          if (activeSkills.length > 0) {
-            executorSystemContent += '\n\n=== RELEVANT SKILLS / KNOWLEDGE ===\n';
-            for (const skillName of activeSkills) {
-              const content = this.skillManager.getSkillContent(skillName);
-              if (content) {
-                executorSystemContent += `\n--- Skill: ${skillName} ---\n${content}\n`;
-              }
-            }
-          }
-
-          let executorInput = `Task: ${args.task}`;
-          if (iteration > 1) {
-            const lastFeedback = telemetryHistory[telemetryHistory.length - 1]?.qaFeedback || 'REJECTED';
-            executorInput = `[QA FEEDBACK FROM PREVIOUS ITERATION]\nStatus: REJECTED\nFeedback:\n${lastFeedback}\n\n[ACCUMULATED WORKING MEMORY]\n${accumulatedWorkingMemory || 'None'}\n\nDO NOT repeat actions you have already successfully completed. Use the working memory above to proceed.\n\n${executorInput}`;
-          }
-          if (supervisorOverride) {
-            executorInput = `[SUPERVISOR OVERRIDE ALERT]\n${supervisorOverride}\n\n${executorInput}`;
-            this.agentLogger.log('Executor', `Applying supervisor override instruction.`, subagentRequestId);
-          }
-
-          const executorRequest: ChatCompletionRequest = {
-            model: executorModel,
-            messages: [
-              { role: 'system', content: executorSystemContent },
-              { role: 'user', content: executorInput },
-            ],
-            // Remove delegate_subagent from tools available to local subagent
-            tools: this.toolRegistry.getDefinitions().filter(t => t.function.name !== 'delegate_subagent'),
-            requestId: `${subagentRequestId}_exec_${iteration}`,
-            parentRequestId: parentRequestId,
-          };
-
-          // Run Executor using the ToolLoopService
-          const executionOptions = {
-            validators: this.validatorService.getValidatorsForEnvironment(getPreparerText()),
-          };
-
-          const execStart = Date.now();
-          const execResult = await this.toolLoop.execute(
-            executorRequest,
-            executorConfig,
-            5,
-            executionOptions,
-          );
-          const executorOutput = execResult.response.data?.choices?.[0]?.message?.content || 'No output';
-          this.agentLogger.log('Executor', `Execution completed in ${Date.now() - execStart}ms`, subagentRequestId);
-
-          // Check if Executor reported type/compilation syntax errors from write_file
-          let localSyntaxError = '';
-          if (execResult.toolCalls) {
-            for (const tc of execResult.toolCalls) {
-              if (tc.name === 'write_file' && tc.result && tc.result.status === 'written_but_has_syntax_errors') {
-                const pathVal = tc.args?.path || 'unknown';
-                const fileErrors = Array.isArray(tc.result.errors) ? tc.result.errors.join('\n') : JSON.stringify(tc.result.errors);
-                localSyntaxError += `File ${pathVal} write error:\n${fileErrors}\n`;
-              }
-            }
-          }
-
-          // 2. Build QA Prompt
-          this.agentLogger.log('QA', 'Starting compilation and type check verification...', subagentRequestId);
-          
-          // Run global tsc and linting check to find project-wide typescript issues
-          let tscReport = 'TypeScript type checking and linting passed cleanly.';
-          const globalCommand = this.validatorService.getGlobalCheckCommand(getPreparerText());
           try {
-            await execAsync(globalCommand, { cwd: process.cwd() });
-          } catch (err: any) {
-            tscReport = err.stdout || err.stderr || err.message;
-          }
+            this.agentLogger.log('Executor', `Iteration ${iteration}/${maxSubIterations} starting...`, subagentRequestId);
 
-          // If write_file itself threw errors, prepend them to the report
-          if (localSyntaxError) {
-            tscReport = `[Local Write Syntax Errors]:\n${localSyntaxError}\n\n[Project Build Errors]:\n${tscReport}`;
-          }
-
-          // Extract actual modified file contents to prevent QA hallucinations over conversational text
-          let modifiedFilesReport = '';
-          const modifiedPaths = new Set<string>();
-          if (execResult.toolCalls) {
-            for (const tc of execResult.toolCalls) {
-              if (['write_file', 'replace_file_content', 'multi_replace_file_content'].includes(tc.name) && tc.args?.path) {
-                modifiedPaths.add(tc.args.path as string);
-              }
+            // 1. Build Executor Prompt
+            let executorSystemContent = this.promptService.loadPrompt('executor');
+            if (supervisorOverride) {
+              executorSystemContent += `\n\n=== CRITICAL SUPERVISOR OVERRIDE ===\nThe Transversal Supervisor has issued a mandatory override instruction. You MUST obey this override immediately and prioritize it over other rules.\nOverride Instruction: ${supervisorOverride}\n\n`;
             }
-          }
-
-          if (modifiedPaths.size > 0) {
-            modifiedFilesReport += '\n\n[Archivos Modificados por el Executor en esta iteración]\n';
-            for (const filePath of modifiedPaths) {
-              try {
-                const absolutePath = path.resolve(process.cwd(), filePath);
-                if (fs.existsSync(absolutePath)) {
-                  const content = fs.readFileSync(absolutePath, 'utf-8');
-                  modifiedFilesReport += `\n--- ${filePath} ---\n${content}\n`;
-                }
-              } catch (e) {
-                // Ignore read errors
-              }
-            }
-          }
-
-          let toolCallsReport = '';
-          if (execResult.toolCalls && execResult.toolCalls.length > 0) {
-            toolCallsReport += '\n\n[Llamadas a Herramientas y Resultados en esta iteración]\n';
-            for (const tc of execResult.toolCalls) {
-              toolCallsReport += `\n--- Herramienta: ${tc.name} ---\n`;
-              toolCallsReport += `Args: ${JSON.stringify(tc.args)}\n`;
-              if (tc.result) {
-                if (tc.name === 'execute_command') {
-                  toolCallsReport += `Exit Code: ${tc.result.exitCode}\n`;
-                  if (tc.result.stdout) toolCallsReport += `Stdout:\n${tc.result.stdout}\n`;
-                  if (tc.result.stderr) toolCallsReport += `Stderr:\n${tc.result.stderr}\n`;
-                } else {
-                  toolCallsReport += `Resultado:\n${typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result, null, 2)}\n`;
+            if (activeSkills.length > 0) {
+              executorSystemContent += '\n\n=== RELEVANT SKILLS / KNOWLEDGE ===\n';
+              for (const skillName of activeSkills) {
+                const content = this.skillManager.getSkillContent(skillName);
+                if (content) {
+                  executorSystemContent += `\n--- Skill: ${skillName} ---\n${content}\n`;
                 }
               }
             }
-          }
 
-          const qaSystemPrompt = this.promptService.loadPrompt('qa');
-          const qaRequest: ChatCompletionRequest = {
-            model: qaModel,
-            messages: [
-              { role: 'system', content: qaSystemPrompt },
-              { 
-                role: 'user', 
-                content: `Task: ${args.task}\n\nExecutor Output:\n${executorOutput}\n\nTypeScript Compiler / Build Report:\n${tscReport}${modifiedFilesReport}${toolCallsReport}` 
-              },
-            ],
-            requestId: `${subagentRequestId}_qa_${iteration}`,
-            parentRequestId: parentRequestId,
-          };
-
-          // Call QA Model
-          const qaResponse = await this.providersService.getProvider(qaConfig.type).chat(qaRequest, qaConfig);
-          const qaFeedback = qaResponse.data?.choices?.[0]?.message?.content || 'REJECTED';
-
-          // Parse QA status (APPROVED vs REJECTED)
-          const isApproved = qaFeedback.toUpperCase().includes('APPROVED') && !qaFeedback.toUpperCase().includes('REJECTED');
-          const qaStatus = isApproved ? 'APPROVED' as const : 'REJECTED' as const;
-
-          // Extract Working Memory Update
-          let workingMemoryUpdate = '';
-          const wmMatch = qaFeedback.match(/(?:-\s*\*\*)?Working Memory Update\*\*?:\s*([^\r\n]+)/i);
-          if (wmMatch && wmMatch[1]) {
-            const val = wmMatch[1].trim();
-            if (val.toLowerCase() !== 'none' && val.toLowerCase() !== '[none]' && val !== '') {
-              workingMemoryUpdate = val;
+            let executorInput = `Task: ${args.task}`;
+            if (iteration > 1) {
+              const lastFeedback = telemetryHistory[telemetryHistory.length - 1]?.qaFeedback || 'REJECTED';
+              executorInput = `[QA FEEDBACK FROM PREVIOUS ITERATION]\nStatus: REJECTED\nFeedback:\n${lastFeedback}\n\n[ACCUMULATED WORKING MEMORY]\n${accumulatedWorkingMemory || 'None'}\n\nDO NOT repeat actions you have already successfully completed. Use the working memory above to proceed.\n\n${executorInput}`;
             }
-          }
-          if (workingMemoryUpdate) {
-            accumulatedWorkingMemory += `- Iteration ${iteration}: ${workingMemoryUpdate}\n`;
-          }
+            if (supervisorOverride) {
+              executorInput = `[SUPERVISOR OVERRIDE ALERT]\n${supervisorOverride}\n\n${executorInput}`;
+              this.agentLogger.log('Executor', `Applying supervisor override instruction.`, subagentRequestId);
+            }
 
-          this.agentLogger.log('QA', `Verification complete. Status: ${qaStatus}. Feedback:\n${qaFeedback}`, subagentRequestId);
+            const executorRequest: ChatCompletionRequest = {
+              model: executorModel,
+              messages: [
+                { role: 'system', content: executorSystemContent },
+                { role: 'user', content: executorInput },
+              ],
+              // Remove delegate_subagent from tools available to local subagent
+              tools: this.toolRegistry.getDefinitions().filter(t => t.function.name !== 'delegate_subagent'),
+              requestId: `${subagentRequestId}_exec_${iteration}`,
+              parentRequestId: parentRequestId,
+            };
 
-          // Update telemetry entry
-          const telemetryEntry: TelemetryEntry = {
-            iteration,
-            task: args.task,
-            executorModel,
-            executorOutputSummary: executorOutput.slice(0, 300),
-            qaStatus,
-            qaFeedback,
-          };
-          telemetryHistory.push(telemetryEntry);
+            // Run Executor using the ToolLoopService
+            const executionOptions = {
+              validators: this.validatorService.getValidatorsForEnvironment(getPreparerText()),
+            };
 
-          if (isApproved) {
-            this.agentLogger.log('QA', 'Task APPROVED. Exiting Executor/QA loop.', subagentRequestId);
-            finalResultContent = executorOutput;
-            break;
-          }
+            const execStart = Date.now();
+            const execResult = await this.toolLoop.execute(
+              executorRequest,
+              executorConfig,
+              5,
+              executionOptions,
+            );
+            const executorOutput = execResult.response.data?.choices?.[0]?.message?.content || 'No output';
+            this.agentLogger.log('Executor', `Execution completed in ${Date.now() - execStart}ms`, subagentRequestId);
 
-          // 3. Transversal Supervisor Agent (Cloud) - Parallel loop detection & override injection
-          this.agentLogger.log('Supervisor', 'Evaluating telemetry for loops and desyncs...', subagentRequestId);
-          const supervisorSystemPrompt = this.promptService.loadPrompt('supervisor');
-          
-          const supervisorRequest: ChatCompletionRequest = {
-            model: pair.orchestrator, // Cloud model
-            messages: [
-              { role: 'system', content: supervisorSystemPrompt },
-              { 
-                role: 'user', 
-                content: `Telemetry History of Executor loop:\n${JSON.stringify(telemetryHistory, null, 2)}` 
-              },
-            ],
-            requestId: `${subagentRequestId}_sup_${iteration}`,
-            parentRequestId: parentRequestId,
-          };
+            // Check if Executor reported type/compilation syntax errors from write_file
+            let localSyntaxError = '';
+            if (execResult.toolCalls) {
+              for (const tc of execResult.toolCalls) {
+                if (tc.name === 'write_file' && tc.result && tc.result.status === 'written_but_has_syntax_errors') {
+                  const pathVal = tc.args?.path || 'unknown';
+                  const fileErrors = Array.isArray(tc.result.errors) ? tc.result.errors.join('\n') : JSON.stringify(tc.result.errors);
+                  localSyntaxError += `File ${pathVal} write error:\n${fileErrors}\n`;
+                }
+              }
+            }
 
-          const supervisorResponse = await this.providersService.getProvider(orchestratorConfig.type).chat(supervisorRequest, orchestratorConfig);
-          const supervisorOutput = supervisorResponse.data?.choices?.[0]?.message?.content || '';
+            // 2. Build QA Prompt
+            this.agentLogger.log('QA', 'Starting compilation and type check verification...', subagentRequestId);
+            
+            // Run global tsc and linting check to find project-wide typescript issues
+            let tscReport = 'TypeScript type checking and linting passed cleanly.';
+            const globalCommand = this.validatorService.getGlobalCheckCommand(getPreparerText());
+            try {
+              await execAsync(globalCommand, { cwd: process.cwd() });
+            } catch (err: any) {
+              tscReport = err.stdout || err.stderr || err.message;
+            }
 
-          this.agentLogger.log('Supervisor', `Analysis:\n${supervisorOutput}`, subagentRequestId);
+            // If write_file itself threw errors, prepend them to the report
+            if (localSyntaxError) {
+              tscReport = `[Local Write Syntax Errors]:\n${localSyntaxError}\n\n[Project Build Errors]:\n${tscReport}`;
+            }
 
-          // Parse Supervisor Status and Override
-          const statusMatch = supervisorOutput.match(/Status\s*:\s*(\w+)/i);
-          const isLoopingOrDiverged = statusMatch && ['LOOPING', 'DIVERGED'].includes(statusMatch[1].toUpperCase());
+            // Extract actual modified file contents to prevent QA hallucinations over conversational text
+            let modifiedFilesReport = '';
+            const modifiedPaths = new Set<string>();
+            if (execResult.toolCalls) {
+              for (const tc of execResult.toolCalls) {
+                if (['write_file', 'replace_file_content', 'multi_replace_file_content'].includes(tc.name) && tc.args?.path) {
+                  modifiedPaths.add(tc.args.path as string);
+                }
+              }
+            }
 
-          const matchOverride = supervisorOutput.match(/Supervisor Override(?:[\*:\s]+)([\s\S]+)$/i);
-          if (isLoopingOrDiverged && matchOverride && matchOverride[1] && !matchOverride[1].toUpperCase().includes('NONE')) {
-            supervisorOverride = matchOverride[1].trim();
-          } else {
-            supervisorOverride = null;
-          }
+            if (modifiedPaths.size > 0) {
+              modifiedFilesReport += '\n\n[Archivos Modificados por el Executor en esta iteración]\n';
+              for (const filePath of modifiedPaths) {
+                try {
+                  const absolutePath = path.resolve(process.cwd(), filePath);
+                  if (fs.existsSync(absolutePath)) {
+                    const content = fs.readFileSync(absolutePath, 'utf-8');
+                    modifiedFilesReport += `\n--- ${filePath} ---\n${content}\n`;
+                  }
+                } catch (e) {
+                  // Ignore read errors
+                }
+              }
+            }
 
-          // 4. Knowledge Gap Detection & Dynamic Skill Injection (browserlens scraping)
-          const needsScraping = qaFeedback.toLowerCase().includes('missing skill') || 
-                                qaFeedback.toLowerCase().includes('unknown api') || 
-                                executorOutput.toLowerCase().includes('i do not know the exact signature') ||
-                                tscReport.includes('cannot find module');
+            let toolCallsReport = '';
+            if (execResult.toolCalls && execResult.toolCalls.length > 0) {
+              toolCallsReport += '\n\n[Llamadas a Herramientas y Resultados en esta iteración]\n';
+              for (const tc of execResult.toolCalls) {
+                toolCallsReport += `\n--- Herramienta: ${tc.name} ---\n`;
+                toolCallsReport += `Args: ${JSON.stringify(tc.args)}\n`;
+                if (tc.result) {
+                  if (tc.name === 'execute_command') {
+                    toolCallsReport += `Exit Code: ${tc.result.exitCode}\n`;
+                    if (tc.result.stdout) toolCallsReport += `Stdout:\n${tc.result.stdout}\n`;
+                    if (tc.result.stderr) toolCallsReport += `Stderr:\n${tc.result.stderr}\n`;
+                  } else {
+                    toolCallsReport += `Resultado:\n${typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result, null, 2)}\n`;
+                  }
+                }
+              }
+            }
 
-          if (needsScraping) {
-            this.agentLogger.warn('System', 'Knowledge gap detected. Initiating SkillWorkflow scraping...', subagentRequestId);
-            // Identify search query (e.g. from compiler logs or missing package mentions)
-            let searchQuery = '';
-            const packageMatch = tscReport.match(/cannot find module [\x27\x22]([^\x27\x22]+)[\x27\x22]/i);
-            if (packageMatch && packageMatch[1]) {
-              searchQuery = packageMatch[1];
+            const qaSystemPrompt = this.promptService.loadPrompt('qa');
+            const qaRequest: ChatCompletionRequest = {
+              model: qaModel,
+              messages: [
+                { role: 'system', content: qaSystemPrompt },
+                { 
+                  role: 'user', 
+                  content: `Task: ${args.task}\n\nExecutor Output:\n${executorOutput}\n\nTypeScript Compiler / Build Report:\n${tscReport}${modifiedFilesReport}${toolCallsReport}` 
+                },
+              ],
+              requestId: `${subagentRequestId}_qa_${iteration}`,
+              parentRequestId: parentRequestId,
+            };
+
+            // Call QA Model
+            const qaResponse = await this.providersService.getProvider(qaConfig.type).chat(qaRequest, qaConfig);
+            const qaFeedback = qaResponse.data?.choices?.[0]?.message?.content || 'REJECTED';
+
+            // Parse QA status (APPROVED vs REJECTED)
+            const isApproved = qaFeedback.toUpperCase().includes('APPROVED') && !qaFeedback.toUpperCase().includes('REJECTED');
+            const qaStatus = isApproved ? 'APPROVED' as const : 'REJECTED' as const;
+
+            // Extract Working Memory Update
+            let workingMemoryUpdate = '';
+            const wmMatch = qaFeedback.match(/(?:-\s*\*\*)?Working Memory Update\*\*?:\s*([^\r\n]+)/i);
+            if (wmMatch && wmMatch[1]) {
+              const val = wmMatch[1].trim();
+              if (val.toLowerCase() !== 'none' && val.toLowerCase() !== '[none]' && val !== '') {
+                workingMemoryUpdate = val;
+              }
+            }
+            if (workingMemoryUpdate) {
+              accumulatedWorkingMemory += `- Iteration ${iteration}: ${workingMemoryUpdate}\n`;
+            }
+
+            this.agentLogger.log('QA', `Verification complete. Status: ${qaStatus}. Feedback:\n${qaFeedback}`, subagentRequestId);
+
+            // Update telemetry entry
+            const telemetryEntry: TelemetryEntry = {
+              iteration,
+              task: args.task,
+              executorModel,
+              executorOutputSummary: executorOutput.slice(0, 300),
+              qaStatus,
+              qaFeedback,
+            };
+            telemetryHistory.push(telemetryEntry);
+
+            if (isApproved) {
+              this.agentLogger.log('QA', 'Task APPROVED. Exiting Executor/QA loop.', subagentRequestId);
+              finalResultContent = executorOutput;
+              break;
+            }
+
+            // 3. Transversal Supervisor Agent (Cloud) - Parallel loop detection & override injection
+            this.agentLogger.log('Supervisor', 'Evaluating telemetry for loops and desyncs...', subagentRequestId);
+            const supervisorSystemPrompt = this.promptService.loadPrompt('supervisor');
+            
+            const supervisorRequest: ChatCompletionRequest = {
+              model: pair.orchestrator, // Cloud model
+              messages: [
+                { role: 'system', content: supervisorSystemPrompt },
+                { 
+                  role: 'user', 
+                  content: `Telemetry History of Executor loop:\n${JSON.stringify(telemetryHistory, null, 2)}` 
+                },
+              ],
+              requestId: `${subagentRequestId}_sup_${iteration}`,
+              parentRequestId: parentRequestId,
+            };
+
+            const supervisorResponse = await this.providersService.getProvider(orchestratorConfig.type).chat(supervisorRequest, orchestratorConfig);
+            const supervisorOutput = supervisorResponse.data?.choices?.[0]?.message?.content || '';
+
+            this.agentLogger.log('Supervisor', `Analysis:\n${supervisorOutput}`, subagentRequestId);
+
+            // Parse Supervisor Status and Override
+            const statusMatch = supervisorOutput.match(/Status\s*:\s*(\w+)/i);
+            const isLoopingOrDiverged = statusMatch && ['LOOPING', 'DIVERGED'].includes(statusMatch[1].toUpperCase());
+
+            const matchOverride = supervisorOutput.match(/Supervisor Override(?:[\*:\s]+)([\s\S]+)$/i);
+            if (isLoopingOrDiverged && matchOverride && matchOverride[1] && !matchOverride[1].toUpperCase().includes('NONE')) {
+              supervisorOverride = matchOverride[1].trim();
             } else {
-              // Fallback to extraction from executor output or query terms
-              searchQuery = args.task.split(' ').slice(0, 4).join(' ');
+              supervisorOverride = null;
             }
 
-            if (searchQuery) {
-              const scraped = await this.skillScraper.scrapeSkill(searchQuery);
-              if (scraped) {
-                // Generate and write skill locally
-                const slug = searchQuery.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-                const skillFile = path.resolve(process.cwd(), 'skills', `${slug}.md`);
-                const skillContent = `---
+            // 4. Knowledge Gap Detection & Dynamic Skill Injection (browserlens scraping)
+            const needsScraping = qaFeedback.toLowerCase().includes('missing skill') || 
+                                  qaFeedback.toLowerCase().includes('unknown api') || 
+                                  executorOutput.toLowerCase().includes('i do not know the exact signature') ||
+                                  tscReport.includes('cannot find module');
+
+            if (needsScraping) {
+              this.agentLogger.warn('System', 'Knowledge gap detected. Initiating SkillWorkflow scraping...', subagentRequestId);
+              // Identify search query (e.g. from compiler logs or missing package mentions)
+              let searchQuery = '';
+              const packageMatch = tscReport.match(/cannot find module [\x27\x22]([^\x27\x22]+)[\x27\x22]/i);
+              if (packageMatch && packageMatch[1]) {
+                searchQuery = packageMatch[1];
+              } else {
+                // Fallback to extraction from executor output or query terms
+                searchQuery = args.task.split(' ').slice(0, 4).join(' ');
+              }
+
+              if (searchQuery) {
+                const scraped = await this.skillScraper.scrapeSkill(searchQuery);
+                if (scraped) {
+                  // Generate and write skill locally
+                  const slug = searchQuery.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                  const skillFile = path.resolve(process.cwd(), 'skills', `${slug}.md`);
+                  const skillContent = `---
 name: ${slug}
 description: Dynamic scraped skill for ${searchQuery}
 category: scraped
@@ -468,18 +500,26 @@ status: draft
 
 ${scraped.content}
 `;
-                this.agentLogger.log('System', `Writing dynamic scraped skill to ${skillFile}`, subagentRequestId);
-                fs.writeFileSync(skillFile, skillContent, 'utf-8');
-                await this.skillManager.loadSkills();
-                if (!activeSkills.includes(slug)) {
-                  activeSkills.push(slug);
+                  this.agentLogger.log('System', `Writing dynamic scraped skill to ${skillFile}`, subagentRequestId);
+                  fs.writeFileSync(skillFile, skillContent, 'utf-8');
+                  await this.skillManager.loadSkills();
+                  if (!activeSkills.includes(slug)) {
+                    activeSkills.push(slug);
+                  }
                 }
               }
             }
-          }
 
-          // Save final fallback content to return if max iterations is hit without approval
-          finalResultContent = executorOutput;
+            // Save final fallback content to return if max iterations is hit without approval
+            finalResultContent = executorOutput;
+          } catch (err: any) {
+            if (err instanceof FatalToolError || err.name === 'FatalToolError') {
+              throw err;
+            }
+            const errMsg = err.message || String(err);
+            this.agentLogger.error('System', `Subagent step failed catastrophically: ${errMsg}`, subagentRequestId);
+            throw new FatalToolError(`Subagent connection or execution failed: ${errMsg}`);
+          }
         }
 
         return {
