@@ -6,6 +6,8 @@ import { ProxyModule } from './proxy/proxy.module';
 import { RouterModule } from './router/router.module';
 import { ProvidersModule } from './providers/providers.module';
 import { ClassifierModule } from './classifier/classifier.module';
+import { PromptsModule } from './prompts/prompts.module';
+import { UtilsModule } from './utils/utils.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -18,6 +20,8 @@ import configuration from './config/configuration';
     RouterModule,
     ProvidersModule,
     ClassifierModule,
+    PromptsModule,
+    UtilsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -15,6 +15,9 @@ import { TranslationService } from '../translation/translation.service';
 import { ToolLoopService } from '../tools/tool-loop.service';
 import { ToolRegistryService } from '../tools/tool-registry.service';
 import { ObservabilityService } from '../observability/observability.service';
+import { SkillManagerService } from '../tools/skill-manager.service';
+import { PromptService } from '../prompts/prompt.service';
+import { WorkflowService } from './workflow.service';
 
 describe('RouterService', () => {
   let routerService: RouterService;
@@ -169,6 +172,35 @@ describe('RouterService', () => {
             registerSubagentTask: jest.fn(),
             updateSubagentTaskStatus: jest.fn(),
             getActiveSubagentTasks: jest.fn().mockReturnValue([]),
+          },
+        },
+        {
+          provide: SkillManagerService,
+          useValue: {
+            getSkillContent: jest.fn().mockReturnValue('mock skill content'),
+          },
+        },
+        {
+          provide: PromptService,
+          useValue: {
+            loadPrompt: jest.fn().mockReturnValue('mock prompt content'),
+          },
+        },
+        {
+          provide: WorkflowService,
+          useValue: {
+            executeWorkflow: jest.fn().mockResolvedValue({
+              response: { data: { choices: [{ message: { content: 'test response' } }] } },
+              metadata: {
+                mode: 'orchestrator',
+                escalated: false,
+                providerKey: 'cloud_nvidia',
+                providerType: 'cloud',
+                model: 'meta/llama-3.3-70b-instruct',
+                originalTokens: 10,
+                finalTokens: 10,
+              },
+            }),
           },
         },
       ],
@@ -385,12 +417,10 @@ describe('RouterService', () => {
 
       const result = await routerService.route(request);
 
-      expect(moduleRef.get(ToolLoopService).execute).toHaveBeenCalledWith(
+      expect(moduleRef.get(WorkflowService).executeWorkflow).toHaveBeenCalledWith(
         request,
-        expect.objectContaining({ type: 'cloud', model: 'meta/llama-3.3-70b-instruct' })
+        expect.objectContaining({ id: 'llama-gemma-orchestrator' })
       );
-      expect(request.tools).toBeDefined();
-      expect(request.tools!.some((t) => t.function.name === 'delegate_subagent')).toBe(true);
       expect(result.metadata.mode).toBe('orchestrator');
     });
 

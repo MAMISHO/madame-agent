@@ -30,7 +30,10 @@ describe('ToolRegistryService', () => {
 
     service.register(handler);
     expect(service.get('test_tool')).toBe(handler);
+    expect(service.get('TEST_TOOL')).toBe(handler);
+    expect(service.get('Test_Tool')).toBe(handler);
     expect(service.has('test_tool')).toBe(true);
+    expect(service.has('TEST_TOOL')).toBe(true);
   });
 
   it('getDefinitions returns all registered tool definitions', () => {

@@ -12,7 +12,9 @@ import { ToolLoopService } from '../tools/tool-loop.service';
 import { ToolRegistryService } from '../tools/tool-registry.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { randomUUID } from 'crypto';
-import { loadPromptTemplate } from '../utils/template-loader';
+import { PromptService } from '../prompts/prompt.service';
+import { WorkflowService } from './workflow.service';
+import { SkillManagerService } from '../tools/skill-manager.service';
 
 export interface RouteMetadata {
   mode: 'direct' | 'classifier' | 'orchestrator';
@@ -25,6 +27,8 @@ export interface RouteMetadata {
   originalTokens: number;
   finalTokens: number;
   toolCalls?: ToolCallRecord[];
+  toolErrors?: string[];
+  iterations?: number;
   outputTokens?: number;
 }
 
@@ -48,12 +52,15 @@ export class RouterService implements OnModuleInit {
     private toolLoopService: ToolLoopService,
     private toolRegistry: ToolRegistryService,
     private observability: ObservabilityService,
+    private skillManager: SkillManagerService,
+    private promptService: PromptService,
+    private workflowService: WorkflowService,
   ) {}
 
   onModuleInit() {
     this.toolRegistry.register({
       definition: this.getDelegationToolDefinition(),
-      execute: async (args: { task: string; subagent_model?: string }, context?: { parentRequestId?: string; parentSignal?: AbortSignal; request?: ChatCompletionRequest }) => {
+      execute: async (args: { task: string; subagent_model?: string; max_iterations?: number; timeout_ms?: number; skills?: string[] }, context?: { parentRequestId?: string; parentSignal?: AbortSignal; request?: ChatCompletionRequest }) => {
         const parentRequestId = context?.parentRequestId || 'unknown';
         const parentSignal = context?.parentSignal;
 
@@ -111,12 +118,25 @@ export class RouterService implements OnModuleInit {
 
           const startTime = Date.now();
           try {
+            let systemContent = this.promptService.loadPrompt('subagent-system');
+            if (args.skills && args.skills.length > 0) {
+              systemContent += '\n\n=== RELEVANT SKILLS / KNOWLEDGE ===\n';
+              for (const skillName of args.skills) {
+                const content = this.skillManager.getSkillContent(skillName);
+                if (content) {
+                  systemContent += `\n--- Skill: ${skillName} ---\n${content}\n`;
+                } else {
+                  this.logger.warn(`[Orchestrator ${parentRequestId}] Requested skill '${skillName}' not found`);
+                }
+              }
+            }
+
             const subagentRequest: ChatCompletionRequest = {
               model: subagentModel,
               messages: [
                 {
                   role: 'system',
-                  content: loadPromptTemplate('subagent_system.txt')
+                  content: systemContent
                 },
                 {
                   role: 'user',
@@ -126,11 +146,21 @@ export class RouterService implements OnModuleInit {
               tools: this.toolRegistry.getDefinitions().filter(t => t.function.name !== 'delegate_subagent'),
               requestId: subagentRequestId,
               parentRequestId,
+              maxIterations: args.max_iterations,
+              timeoutMs: args.timeout_ms,
             };
             (subagentRequest as any).signal = subagentAbortController.signal;
 
             const routeResult = await this.route(subagentRequest);
-            finalResultContent = routeResult.response.data?.choices?.[0]?.message?.content || 'No response from subagent';
+            finalResultContent = routeResult.response.data?.choices?.[0]?.message?.content;
+            if (!finalResultContent) {
+              const toolErrors = routeResult.metadata?.toolErrors || [];
+              if (toolErrors.length > 0) {
+                finalResultContent = `No response from subagent. Tool errors encountered:\n${toolErrors.join('\n')}`;
+              } else {
+                finalResultContent = 'No response from subagent';
+              }
+            }
             
             const duration = Date.now() - startTime;
             this.logger.log(`[Subagent ${subagentRequestId}] COMPLETED successfully in ${duration}ms (Model: ${subagentModel})`);
@@ -191,7 +221,7 @@ export class RouterService implements OnModuleInit {
               messages: [
                 {
                   role: 'system',
-                  content: loadPromptTemplate('self_fallback_system.txt')
+                  content: this.promptService.loadPrompt('self-fallback-system')
                 },
                 {
                   role: 'user',
@@ -253,6 +283,9 @@ export class RouterService implements OnModuleInit {
         const msg = result.response.data.choices[0].message;
         if (!msg.extra_content) {
           msg.extra_content = {};
+        }
+        if (result.metadata.iterations !== undefined) {
+          msg.extra_content.iteration = result.metadata.iterations;
         }
         if (toolCalls && toolCalls.length > 0) {
           msg.extra_content.tool_calls = toolCalls;
@@ -401,7 +434,7 @@ export class RouterService implements OnModuleInit {
           originalTokens,
           finalTokens: this.estimateTokens(request.messages),
         };
-        const { response, toolCalls } = await this.callWithRoutingMetadata(
+        const { response, toolCalls, iterations, toolErrors } = await this.callWithRoutingMetadata(
           () => this.callProviderOrToolLoop(request, directMatch.config),
           metadata,
         );
@@ -414,7 +447,7 @@ export class RouterService implements OnModuleInit {
           );
         }
 
-        return { response, metadata: { ...metadata, toolCalls } };
+        return { response, metadata: { ...metadata, toolCalls, iterations, toolErrors } };
       }
       this.logger.debug(
         `Model "${request.model}" not found in providers config, falling back to classifier routing.`,
@@ -494,8 +527,9 @@ export class RouterService implements OnModuleInit {
       model: modelConfig.model,
       originalTokens,
       finalTokens: this.estimateTokens(request.messages),
+      iterations: 0,
     };
-    const { response, toolCalls } = await this.callWithRoutingMetadata(
+    const { response, toolCalls, iterations, toolErrors } = await this.callWithRoutingMetadata(
       () => this.callProviderOrToolLoop(request, modelConfig),
       metadata,
     );
@@ -508,7 +542,7 @@ export class RouterService implements OnModuleInit {
       );
     }
 
-    return { response, metadata: { ...metadata, toolCalls } };
+    return { response, metadata: { ...metadata, toolCalls, iterations, toolErrors } };
   }
 
   private async routeThroughPair(
@@ -583,7 +617,7 @@ export class RouterService implements OnModuleInit {
       originalTokens,
       finalTokens: this.estimateTokens(request.messages),
     };
-    const { response, toolCalls } = await this.callWithRoutingMetadata(
+    const { response, toolCalls, iterations, toolErrors } = await this.callWithRoutingMetadata(
       () => this.callProviderOrToolLoop(request, selectedConfig),
       metadata,
     );
@@ -596,13 +630,13 @@ export class RouterService implements OnModuleInit {
       );
     }
 
-    return { response, metadata: { ...metadata, toolCalls } };
+    return { response, metadata: { ...metadata, toolCalls, iterations, toolErrors } };
   }
 
   private async callWithRoutingMetadata(
-    task: () => Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[] }>,
+    task: () => Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[]; iterations?: number; toolErrors?: string[] }>,
     metadata: RouteMetadata,
-  ): Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[] }> {
+  ): Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[]; iterations?: number; toolErrors?: string[] }> {
     try {
       const result = await task();
       metadata.outputTokens = result.response.data?.usage?.completion_tokens || 0;
@@ -615,18 +649,18 @@ export class RouterService implements OnModuleInit {
   private async callProviderOrToolLoop(
     request: ChatCompletionRequest,
     modelConfig: any,
-  ): Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[] }> {
+  ): Promise<{ response: ProviderResponse; toolCalls?: ToolCallRecord[]; iterations?: number; toolErrors?: string[] }> {
     const hasTools = request.tools && request.tools.length > 0;
 
     if (hasTools) {
       this.logger.log(`ToolLoop activated: ${request.tools!.length} tool(s) provided, model=${modelConfig.model}`);
       const result = await this.toolLoopService.execute(request, modelConfig);
-      return { response: result.response, toolCalls: result.toolCalls };
+      return { response: result.response, toolCalls: result.toolCalls, iterations: result.iterations, toolErrors: result.errors };
     }
 
     const providerInstance = this.providersService.getProvider(modelConfig.type);
     const response = await providerInstance.chat(request, modelConfig);
-    return { response, toolCalls: undefined };
+    return { response, toolCalls: undefined, iterations: 1, toolErrors: undefined };
   }
 
   private lastUserMessage(messages: any[]): string {
@@ -717,6 +751,19 @@ export class RouterService implements OnModuleInit {
             subagent_model: {
               type: 'string',
               description: 'Optional model name or pair name to use for the subagent. If not specified, the default subagents will be tried in order.'
+            },
+            max_iterations: {
+              type: 'number',
+              description: 'Optional maximum number of iterations for the subagent. Set higher (e.g. 30-40) for complex tasks, or lower (e.g. 5-10) for simple tasks.'
+            },
+            timeout_ms: {
+              type: 'number',
+              description: 'Optional timeout in milliseconds for the subagent tool loop.'
+            },
+            skills: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional array of skill names to inject into the subagent prompt (e.g. ["opencode-plugin-api"]). Use the search_skills tool to find available skills.'
             }
           },
           required: ['task']
@@ -730,88 +777,7 @@ export class RouterService implements OnModuleInit {
     providersConfig: Record<string, any>,
     pair: { id: string; name: string; orchestrator: string; subagents: string[] },
   ): Promise<RouteResult> {
-    const orchestratorConfig = providersConfig[pair.orchestrator];
-    if (!orchestratorConfig) {
-      throw new Error(`Orchestrator provider "${pair.orchestrator}" not found for pair "${pair.name}"`);
-    }
-
-    // Orchestrator should only have access to delegate_subagent tool
-    request.tools = [this.getDelegationToolDefinition()];
-
-    // Inject strict system prompt for orchestrator to force delegation
-    const systemInstruction = loadPromptTemplate('orchestrator_delegate.txt');
-    const systemMsg = request.messages.find(m => m.role === 'system');
-    if (systemMsg) {
-      systemMsg.content = `${systemMsg.content || ''}\n\n${systemInstruction}`;
-    } else {
-      request.messages.unshift({
-        role: 'system',
-        content: systemInstruction
-      });
-    }
-
-    // Force delegation on the first call using 'required' (widely supported string value)
-    if (!request.tool_choice) {
-      request.tool_choice = 'required';
-    }
-
-    this.logger.log(
-      `[Orchestrator ${request.requestId}] STARTED request: model="${request.model}", ` +
-      `orchestrator="${pair.orchestrator}" (${orchestratorConfig.model}), ` +
-      `prompt="${this.lastUserMessage(request.messages).slice(0, 150)}..."`
-    );
-
-    this.logger.log(
-      `Orchestrator pair "${pair.name}": using orchestrator ${pair.orchestrator} (${orchestratorConfig.model})`,
-    );
-
-    const originalTokens = this.estimateTokens(request.messages);
-    const processed = this.contextService.process(request.messages, {
-      maxTokens: this.resolveContextLimit(orchestratorConfig),
-    });
-    request.messages = processed.messages;
-
-    const cacheInput = JSON.stringify(request.messages);
-    const cached = await this.cacheService.findSimilar(cacheInput);
-    if (cached) {
-      return {
-        response: { data: cached.response },
-        metadata: {
-          mode: 'orchestrator',
-          escalated: false,
-          providerKey: pair.orchestrator,
-          providerType: orchestratorConfig.type,
-          model: orchestratorConfig.model,
-          originalTokens,
-          finalTokens: this.estimateTokens(request.messages),
-        },
-      };
-    }
-
-    const metadata: RouteMetadata = {
-      mode: 'orchestrator',
-      escalated: false,
-      providerKey: pair.orchestrator,
-      providerType: orchestratorConfig.type,
-      model: orchestratorConfig.model,
-      originalTokens,
-      finalTokens: this.estimateTokens(request.messages),
-    };
-
-    const { response, toolCalls } = await this.callWithRoutingMetadata(
-      () => this.callProviderOrToolLoop(request, orchestratorConfig),
-      metadata,
-    );
-
-    if (response.data) {
-      await this.cacheService.store(
-        request.messages,
-        response.data,
-        originalTokens - this.estimateTokens(request.messages),
-      );
-    }
-
-    return { response, metadata: { ...metadata, toolCalls } };
+    return this.workflowService.executeWorkflow(request, pair);
   }
 
   private resolveContextLimit(modelConfig: any): number | undefined {

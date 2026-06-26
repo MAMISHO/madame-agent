@@ -183,10 +183,12 @@ cache:
 
 tools:
   enabled: true
-  max_iterations: 20
-  global_timeout_ms: 300000
+  max_iterations: 40
+  global_timeout_ms: -1
   sandbox:
     workspace: /Users/mamisho/dev/madame-agent
+    allowed_paths:
+      - ~/.config/opencode/plugins/
     denied_commands:
       - rm
       - sudo

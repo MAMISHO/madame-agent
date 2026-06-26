@@ -1,0 +1,74 @@
+{
+  "prompts": [
+    {
+      "id": "detect-language",
+      "description": "Detects the language code of the input text.",
+      "agentSource": "system",
+      "agentTarget": "translation",
+      "file": "detect-language.md"
+    },
+    {
+      "id": "translate-text",
+      "description": "Translates the text to target language.",
+      "agentSource": "system",
+      "agentTarget": "translation",
+      "file": "translate-text.md"
+    },
+    {
+      "id": "self-fallback-system",
+      "description": "Self fallback system instructions.",
+      "agentSource": "system",
+      "agentTarget": "self-fallback",
+      "file": "self-fallback-system.md"
+    },
+    {
+      "id": "subagent-system",
+      "description": "Subagent system instructions.",
+      "agentSource": "orchestrator",
+      "agentTarget": "subagent",
+      "file": "subagent-system.md"
+    },
+    {
+      "id": "orchestrator-delegate",
+      "description": "Orchestrator delegation and evaluation rules.",
+      "agentSource": "system",
+      "agentTarget": "orchestrator",
+      "file": "orchestrator-delegate.md"
+    },
+    {
+      "id": "planner",
+      "description": "Planner agent template for engineering technical plan.",
+      "agentSource": "system",
+      "agentTarget": "planner",
+      "file": "planner.md"
+    },
+    {
+      "id": "preparer",
+      "description": "Preparer agent template for initializing build context.",
+      "agentSource": "system",
+      "agentTarget": "preparer",
+      "file": "preparer.md"
+    },
+    {
+      "id": "executor",
+      "description": "Executor agent template for code generation and commands.",
+      "agentSource": "orchestrator",
+      "agentTarget": "executor",
+      "file": "executor.md"
+    },
+    {
+      "id": "qa",
+      "description": "QA agent template for review, linting, and verification.",
+      "agentSource": "orchestrator",
+      "agentTarget": "qa",
+      "file": "qa.md"
+    },
+    {
+      "id": "supervisor",
+      "description": "Transversal Supervisor agent template for monitoring telemetry and injecting overrides.",
+      "agentSource": "system",
+      "agentTarget": "supervisor",
+      "file": "supervisor.md"
+    }
+  ]
+}
