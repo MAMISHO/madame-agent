@@ -299,6 +299,32 @@ export class WorkflowService {
             tscReport = `[Local Write Syntax Errors]:\n${localSyntaxError}\n\n[Project Build Errors]:\n${tscReport}`;
           }
 
+          // Extract actual modified file contents to prevent QA hallucinations over conversational text
+          let modifiedFilesReport = '';
+          const modifiedPaths = new Set<string>();
+          if (execResult.toolCalls) {
+            for (const tc of execResult.toolCalls) {
+              if (['write_file', 'replace_file_content', 'multi_replace_file_content'].includes(tc.name) && tc.args?.path) {
+                modifiedPaths.add(tc.args.path as string);
+              }
+            }
+          }
+
+          if (modifiedPaths.size > 0) {
+            modifiedFilesReport += '\n\n[Archivos Modificados por el Executor en esta iteración]\n';
+            for (const filePath of modifiedPaths) {
+              try {
+                const absolutePath = path.resolve(process.cwd(), filePath);
+                if (fs.existsSync(absolutePath)) {
+                  const content = fs.readFileSync(absolutePath, 'utf-8');
+                  modifiedFilesReport += `\n--- ${filePath} ---\n${content}\n`;
+                }
+              } catch (e) {
+                // Ignore read errors
+              }
+            }
+          }
+
           const qaSystemPrompt = this.promptService.loadPrompt('qa');
           const qaRequest: ChatCompletionRequest = {
             model: qaModel,
@@ -306,7 +332,7 @@ export class WorkflowService {
               { role: 'system', content: qaSystemPrompt },
               { 
                 role: 'user', 
-                content: `Task: ${args.task}\n\nExecutor Output:\n${executorOutput}\n\nTypeScript Compiler / Build Report:\n${tscReport}` 
+                content: `Task: ${args.task}\n\nExecutor Output:\n${executorOutput}\n\nTypeScript Compiler / Build Report:\n${tscReport}${modifiedFilesReport}` 
               },
             ],
             requestId: `${subagentRequestId}_qa_${iteration}`,
