@@ -131,6 +131,22 @@ export class ProxyController {
   ) {
     const requestId = `req_${++requestCounter}`;
     body.requestId = requestId;
+
+    // Detect harness client
+    const userAgent = req.headers['user-agent'] || '';
+    const harness =
+      body.metadata?.harness ||
+      req.headers['x-harness-client'] ||
+      req.headers['x-client-id'] ||
+      (userAgent.toLowerCase().includes('opencode') ? 'opencode' : undefined);
+
+    if (harness) {
+      body.metadata = {
+        ...body.metadata,
+        harness: typeof harness === 'string' ? harness : String(harness),
+      };
+    }
+
     this.observability.startTimer(requestId);
 
     const abortHandler = () => {

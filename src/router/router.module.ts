@@ -9,6 +9,7 @@ import { CacheModule } from '../cache/cache.module';
 import { TranslationModule } from '../translation/translation.module';
 import { ToolsModule } from '../tools/tools.module';
 import { ObservabilityModule } from '../observability/observability.module';
+import { HarnessModule } from '../harness/harness.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ObservabilityModule } from '../observability/observability.module';
     TranslationModule,
     ToolsModule,
     ObservabilityModule,
+    HarnessModule,
   ],
   providers: [RouterService, WorkflowService],
   exports: [RouterService, WorkflowService],

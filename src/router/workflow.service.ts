@@ -11,6 +11,7 @@ import { SkillManagerService } from '../tools/skill-manager.service';
 import { SkillScraperService } from '../tools/skill-scraper.service';
 import { ValidatorService } from '../tools/validator.service';
 import { ObservabilityService } from '../observability/observability.service';
+import { HarnessService } from '../harness/harness.service';
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -45,6 +46,7 @@ export class WorkflowService {
     private skillScraper: SkillScraperService,
     private observability: ObservabilityService,
     private validatorService: ValidatorService,
+    private harnessService: HarnessService,
   ) {}
 
   async executeWorkflow(
@@ -53,7 +55,19 @@ export class WorkflowService {
   ): Promise<any> {
     const parentRequestId = request.requestId || `req_${randomUUID().slice(0, 8)}`;
     request.requestId = parentRequestId;
-    const userMessage = this.lastUserMessage(request.messages);
+    const harnessName = request.metadata?.harness;
+    const strategy = this.harnessService.getStrategy(harnessName);
+
+    const parsed = strategy.parseRequest(request.messages);
+    let userMessage = parsed.userMessage;
+    if (parsed.isInterventionReply && parsed.interventionAnswer) {
+      this.userResponses.set(parentRequestId, parsed.interventionAnswer);
+      this.agentLogger.log(
+        'System',
+        `Detected user response to intervention in history: "${parsed.interventionAnswer}" using strategy "${strategy.name}"`,
+        parentRequestId,
+      );
+    }
 
     this.agentLogger.log('System', `Executing multi-agent workflow for request: "${userMessage.slice(0, 100)}..."`, parentRequestId);
 
@@ -80,11 +94,7 @@ export class WorkflowService {
           { role: 'system', content: preparerPrompt },
           { role: 'user', content: `Task: ${userMessage}` },
         ],
-        tools: [
-          this.getDelegationToolDefinition(pair.subagents),
-          this.toolRegistry.getDefinitions().find(t => t.function.name === 'ask_user'),
-        ].filter(Boolean) as any,
-        tool_choice: 'required',
+        tools: this.toolRegistry.getDefinitions().filter(t => t.function.name !== 'delegate_subagent') as any,
         requestId: `prep_${randomUUID().slice(0, 8)}`,
         parentRequestId,
       };
@@ -203,27 +213,9 @@ export class WorkflowService {
     } catch (err: any) {
       if (err instanceof UserInteractionRequiredError || err.name === 'UserInteractionRequiredError') {
         this.agentLogger.log('System', `Workflow paused for user interaction: "${err.question}"`, parentRequestId);
-        return {
-          response: {
-            data: {
-              status: 'pending_user_input',
-              requestId: err.requestId || parentRequestId,
-              question: err.question,
-            } as any,
-          },
-          metadata: {
-            mode: 'orchestrator',
-            escalated: false,
-            providerKey: pair.orchestrator,
-            providerType: orchestratorConfig?.type || 'unknown',
-            model: orchestratorConfig?.model || 'unknown',
-            originalTokens: 0,
-            finalTokens: 0,
-            iterations: 0,
-            toolCalls: [],
-            toolErrors: [err.message],
-          },
-        };
+        const harnessName = request.metadata?.harness;
+        const strategy = this.harnessService.getStrategy(harnessName);
+        return strategy.formatInterventionResponse(parentRequestId, err.question, orchestratorConfig);
       }
       throw err;
     }
