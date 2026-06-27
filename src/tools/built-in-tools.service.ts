@@ -156,7 +156,18 @@ export class BuiltInToolsService {
           return { error: 'pattern must be a non-empty string', pattern: args.pattern, count: 0, files: [] };
         }
         const { glob } = await import('glob');
-        const files = await glob(args.pattern, { nodir: true });
+        const files = await glob(args.pattern, { 
+          nodir: true, 
+          ignore: [
+            '**/node_modules/**', 
+            '**/dist/**', 
+            '**/.git/**',
+            '**/build/**',
+            '**/target/**',
+            '**/.venv/**',
+            '**/venv/**'
+          ] 
+        });
         return { pattern: args.pattern, count: files.length, files };
       },
       timeout: 15_000,
