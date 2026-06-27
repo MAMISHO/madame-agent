@@ -206,29 +206,36 @@ export class ProxyController {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders();
 
         const content = response.data.choices?.[0]?.message?.content || '';
         const id = response.data.id || requestId;
         const created = response.data.created || Math.floor(Date.now() / 1000);
         const model = body.model || response.data.model || 'madame-agent';
 
+        const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
         // Chunk 1: role announcement
         res.write(`data: ${JSON.stringify({
           id, object: 'chat.completion.chunk', created, model,
           choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }],
         })}\n\n`);
+        await sleep(20);
 
         // Chunk 2: content delivery
         res.write(`data: ${JSON.stringify({
           id, object: 'chat.completion.chunk', created, model,
           choices: [{ index: 0, delta: { content }, finish_reason: null }],
         })}\n\n`);
+        await sleep(20);
 
         // Chunk 3: stop signal
         res.write(`data: ${JSON.stringify({
           id, object: 'chat.completion.chunk', created, model,
           choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
         })}\n\n`);
+        await sleep(20);
 
         res.write('data: [DONE]\n\n');
         res.end();
