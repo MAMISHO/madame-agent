@@ -203,6 +203,9 @@ describe('WorkflowService', () => {
     providersService = module.get<ProvidersService>(ProvidersService);
     toolRegistryService = module.get<ToolRegistryService>(ToolRegistryService);
     promptService = module.get<PromptService>(PromptService);
+
+    // Mock Ollama port check so tests don't depend on a real Ollama process
+    jest.spyOn(workflowService as any, 'isOllamaResponsive').mockResolvedValue(true);
   });
 
   it('should run multi-agent workflow in inverted order: Preparer first, then Planner, then Orchestrator', async () => {
@@ -273,7 +276,7 @@ describe('WorkflowService', () => {
     expect(result.metadata.mode).toBe('orchestrator');
   });
 
-  it('should pause execution with status pending_user_input when ask_user throws UserInteractionRequiredError and resume when requested', async () => {
+  it('should pause execution with status pending_user_input when Ollama is down and resume when user approves', async () => {
     const request: ChatCompletionRequest = {
       model: 'cloud_nvidia',
       messages: [{ role: 'user', content: 'test task' }],
@@ -287,40 +290,19 @@ describe('WorkflowService', () => {
       subagents: ['local_medium'],
     };
 
-    // First, make the toolLoop mock throw UserInteractionRequiredError
-    const { UserInteractionRequiredError } = require('../tools/tool-loop.service');
-    jest.spyOn(toolLoopService, 'execute')
-      .mockRejectedValueOnce(new UserInteractionRequiredError('Check Ollama?', 'req_123'));
+    // Make Ollama appear down so ensureOllamaReady throws UserInteractionRequiredError
+    jest.spyOn(workflowService as any, 'isOllamaResponsive').mockResolvedValue(false);
 
     const result = await workflowService.executeWorkflow(request, pair);
 
-    // Expect workflow to return pending status and the correct question
+    // Expect intervention response (via CLI strategy formatInterventionResponse)
     expect(result.response.data.status).toBe('pending_user_input');
-    expect(result.response.data.question).toBe('Check Ollama?');
+    expect(result.response.data.question).toContain('Ollama no está activo');
+
+    // On resume, simulate Ollama is now up (user started it manually or script worked)
+    jest.spyOn(workflowService as any, 'isOllamaResponsive').mockResolvedValue(true);
+
     const reqId = result.response.data.requestId;
-    expect(reqId).toBeDefined();
-
-    // Now resume the workflow
-    jest.spyOn(toolLoopService, 'execute').mockResolvedValueOnce({
-      response: {
-        data: {
-          choices: [
-            {
-              message: {
-                role: 'assistant',
-                content: 'optimized environment report',
-              },
-            },
-          ],
-        },
-      },
-      iterations: 1,
-      toolCallsExecuted: 0,
-      errors: [],
-      toolCalls: [],
-    } as any);
-
-    // Resume the workflow with the answer
     const resumeResult = await workflowService.resumeWorkflow(reqId, 'Sí');
 
     // Expect the final result to be returned successfully

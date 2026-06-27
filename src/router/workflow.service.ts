@@ -17,6 +17,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as net from 'net';
 
 const execAsync = promisify(exec);
 
@@ -84,6 +85,9 @@ export class WorkflowService {
 
       // 1. Register Custom Executor/QA delegate_subagent tool
       this.registerCustomDelegationTool(pair, parentRequestId, () => preparerText);
+
+      // 1.5. Ollama Lifecycle Check (deterministic, not LLM-dependent)
+      await this.ensureOllamaReady(parentRequestId, request, pair);
 
       // 2. Environment Preparer Agent (Cloud)
       this.agentLogger.log('Preparer', 'Verifying environment and configuring context...', parentRequestId);
@@ -623,5 +627,124 @@ ${scraped.content}
         }
       }
     };
+  }
+
+  /**
+   * Deterministic Ollama lifecycle check. Replaces the unreliable LLM-prompt-based check.
+   * Checks if any subagent in the pair uses Ollama, verifies port connectivity,
+   * and throws UserInteractionRequiredError if Ollama is down.
+   * On workflow resume (user responded), executes the optimize script.
+   */
+  private async ensureOllamaReady(
+    parentRequestId: string,
+    request: ChatCompletionRequest,
+    pair: { id: string; name: string; orchestrator: string; subagents: string[] },
+  ): Promise<void> {
+    const providersConfig = this.configService.get('providers') || {};
+
+    // Check if any subagent in this pair uses Ollama
+    const usesOllama = pair.subagents.some((key) => {
+      const cfg = providersConfig[key];
+      return cfg && cfg.type === 'ollama';
+    });
+
+    if (!usesOllama) {
+      this.agentLogger.log('System', 'No Ollama subagents in this pair, skipping lifecycle check.', parentRequestId);
+      return;
+    }
+
+    // Check if Ollama port is responsive
+    const isUp = await this.isOllamaResponsive();
+    if (isUp) {
+      this.agentLogger.log('System', 'Ollama is responsive on port 11434.', parentRequestId);
+      return;
+    }
+
+    // Ollama is down. Check if we already have a user response (resume flow)
+    const existingAnswer = this.userResponses.get(parentRequestId);
+    if (existingAnswer) {
+      // User already answered — check if affirmative
+      const normalized = existingAnswer.toLowerCase().trim();
+      const isAffirmative = ['sí', 'si', 'yes', 'ok', 'dale', 'adelante', 'claro', 'por supuesto', 'hazlo'].some(
+        (word) => normalized.includes(word),
+      );
+
+      if (isAffirmative) {
+        this.agentLogger.log('System', 'User approved Ollama start. Running optimize-ollama.sh...', parentRequestId);
+        try {
+          const scriptPath = path.resolve('scripts/optimize-ollama.sh');
+          if (fs.existsSync(scriptPath)) {
+            const { stdout, stderr } = await execAsync(`sh ${scriptPath}`, { timeout: 30000 });
+            this.agentLogger.log('System', `optimize-ollama.sh output: ${stdout.trim()}`, parentRequestId);
+            if (stderr.trim()) {
+              this.agentLogger.log('System', `optimize-ollama.sh stderr: ${stderr.trim()}`, parentRequestId);
+            }
+
+            // Verify Ollama is now responsive
+            const readyAfterScript = await this.isOllamaResponsive(15);
+            if (readyAfterScript) {
+              this.agentLogger.log('System', 'Ollama started and responsive after optimization.', parentRequestId);
+            } else {
+              this.agentLogger.error('System', 'Ollama did not become responsive after running optimize-ollama.sh.', parentRequestId);
+            }
+          } else {
+            // No script, try starting Ollama directly
+            this.agentLogger.log('System', 'optimize-ollama.sh not found. Attempting direct start...', parentRequestId);
+            await execAsync('OLLAMA_NUM_PARALLEL=2 ollama serve > /dev/null 2>&1 &', { timeout: 5000 }).catch(() => {});
+            const readyDirect = await this.isOllamaResponsive(15);
+            if (readyDirect) {
+              this.agentLogger.log('System', 'Ollama started directly and is responsive.', parentRequestId);
+            } else {
+              this.agentLogger.error('System', 'Ollama did not become responsive after direct start attempt.', parentRequestId);
+            }
+          }
+        } catch (err: any) {
+          this.agentLogger.error('System', `Failed to start Ollama: ${err.message}`, parentRequestId);
+        }
+      } else {
+        this.agentLogger.log('System', `User declined Ollama start: "${existingAnswer}"`, parentRequestId);
+      }
+      // Clear the response so we don't re-process it
+      this.userResponses.delete(parentRequestId);
+      return;
+    }
+
+    // No user response yet — throw to ask the user
+    this.agentLogger.log('System', 'Ollama is not responsive. Requesting user permission to start it.', parentRequestId);
+    throw new UserInteractionRequiredError(
+      'He detectado que Ollama no está activo (puerto 11434 no responde). Para proceder con las tareas locales, ¿me permites iniciarlo con optimización para múltiples contextos paralelos?',
+      parentRequestId,
+    );
+  }
+
+  /**
+   * TCP port check to determine if Ollama is listening.
+   * Retries up to `maxAttempts` times with 1-second intervals.
+   */
+  private async isOllamaResponsive(maxAttempts = 1): Promise<boolean> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const isUp = await new Promise<boolean>((resolve) => {
+        const socket = new net.Socket();
+        socket.setTimeout(2000);
+        socket.on('connect', () => {
+          socket.destroy();
+          resolve(true);
+        });
+        socket.on('timeout', () => {
+          socket.destroy();
+          resolve(false);
+        });
+        socket.on('error', () => {
+          socket.destroy();
+          resolve(false);
+        });
+        socket.connect(11434, '127.0.0.1');
+      });
+      if (isUp) return true;
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+    return false;
   }
 }
