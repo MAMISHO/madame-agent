@@ -195,6 +195,44 @@ export class ProxyController {
           res.write(chunk);
         }
         res.end();
+      } else if (body.stream && !response.stream && response.data) {
+        // Client requested streaming but the response is non-streamed (e.g., intervention/error).
+        // Convert the chat.completion response into SSE format so streaming clients (OpenCode) display it.
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const content = response.data.choices?.[0]?.message?.content || '';
+        const streamChunk = {
+          id: response.data.id || requestId,
+          object: 'chat.completion.chunk',
+          created: response.data.created || Math.floor(Date.now() / 1000),
+          model: response.data.model || body.model || 'madame-agent',
+          choices: [
+            {
+              index: 0,
+              delta: { role: 'assistant', content },
+              finish_reason: null,
+            },
+          ],
+        };
+        const stopChunk = {
+          id: response.data.id || requestId,
+          object: 'chat.completion.chunk',
+          created: response.data.created || Math.floor(Date.now() / 1000),
+          model: response.data.model || body.model || 'madame-agent',
+          choices: [
+            {
+              index: 0,
+              delta: {},
+              finish_reason: 'stop',
+            },
+          ],
+        };
+        res.write(`data: ${JSON.stringify(streamChunk)}\n\n`);
+        res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
       } else {
         res.json(response.data);
       }
