@@ -1,10 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ModelProvider, ProviderResponse } from './provider.interface';
 import { ChatCompletionRequest } from '../proxy/dto/openai.dto';
+import { Agent } from 'undici';
 
 @Injectable()
 export class OllamaProvider implements ModelProvider {
   private readonly logger = new Logger(OllamaProvider.name);
+
+  // Disable native fetch timeouts (undici) for long local inference prompts
+  private readonly dispatcher = new Agent({
+    bodyTimeout: 0,
+    headersTimeout: 0,
+    keepAliveTimeout: 15 * 60 * 1000, // 15 minutes
+  });
 
   async chat(
     request: ChatCompletionRequest,
@@ -31,7 +39,8 @@ export class OllamaProvider implements ModelProvider {
       },
       body: JSON.stringify(payload),
       signal,
-    });
+      dispatcher: this.dispatcher,
+    } as any);
 
     if (!response.ok) {
       const errorText = await response.text();
