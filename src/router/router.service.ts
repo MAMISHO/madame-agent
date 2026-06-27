@@ -3,8 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ChatCompletionRequest, ToolCallRecord } from '../proxy/dto/openai.dto';
 import { ProvidersService } from '../providers/providers.service';
 import { ProviderResponse } from '../providers/provider.interface';
-import { ClassifierService } from '../classifier/classifier.service';
-import { ConfidenceEngineService } from '../confidence/confidence.service';
+import { ModelResolverService } from './model-resolver.service';
 import { ContextService } from '../context/context.service';
 import { CacheService } from '../cache/cache.service';
 import { TranslationService } from '../translation/translation.service';
@@ -44,8 +43,7 @@ export class RouterService implements OnModuleInit {
   constructor(
     private configService: ConfigService,
     private providersService: ProvidersService,
-    private classifierService: ClassifierService,
-    private confidenceEngine: ConfidenceEngineService,
+    private modelResolverService: ModelResolverService,
     private contextService: ContextService,
     private cacheService: CacheService,
     private translationService: TranslationService,
@@ -70,9 +68,8 @@ export class RouterService implements OnModuleInit {
           subagentsToTry = [args.subagent_model];
         } else {
           // Resolve subagents from active orchestrator pair if possible
-          const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
           const requestModel = context?.request?.model;
-          const pair = requestModel ? this.findOrchestratorPair(requestModel, orchestratorPairs) : null;
+          const pair = requestModel ? this.modelResolverService.getOrchestratorPair(requestModel) : null;
           if (pair && pair.subagents) {
             subagentsToTry = [...pair.subagents];
           } else {
@@ -188,8 +185,7 @@ export class RouterService implements OnModuleInit {
           this.logger.warn(`[Orchestrator ${parentRequestId}] All candidate subagents failed. Falling back to isolated self-assignment.`);
           
           const requestModel = context && (context as any).request?.model;
-          const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
-          const pair = requestModel ? this.findOrchestratorPair(requestModel, orchestratorPairs) : null;
+          const pair = requestModel ? this.modelResolverService.getOrchestratorPair(requestModel) : null;
           const orchestratorModelKey = pair ? pair.orchestrator : (requestModel || 'cloud_nvidia');
           
           const selfRequestId = `self_${randomUUID().slice(0, 8)}`;
@@ -356,8 +352,6 @@ export class RouterService implements OnModuleInit {
     }
 
     const providersConfig = this.configService.get('providers') || {};
-    const modelPairs = this.configService.get('model_pairs') || [];
-    const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
 
     // --- Virtual Models Interception ---
     if (request.model === 'madame-auto') {
@@ -375,122 +369,21 @@ export class RouterService implements OnModuleInit {
 
     // 0. Orchestrator routing: if model matches a named orchestrator pair
     if (request.model) {
-      const orchestratorPair = this.findOrchestratorPair(request.model, orchestratorPairs);
+      const orchestratorPair = this.modelResolverService.getOrchestratorPair(request.model);
       if (orchestratorPair) {
         return this.routeThroughOrchestrator(request, providersConfig, orchestratorPair);
       }
     }
 
-    // 1. Composite pair routing: if model matches a named pair, use local + optional escalation
-    if (request.model) {
-      const pair = this.findModelPair(request.model, modelPairs);
-      if (pair) {
-        return this.routeThroughPair(request, providersConfig, pair);
-      }
-    }
-
-    // 2. Direct routing: if the client specifies a model that matches a configured provider, use it directly
-    if (request.model) {
-      const directMatch = this.findProviderByModel(
-        request.model,
-        providersConfig,
-      );
-      if (directMatch) {
-        this.logger.log(
-          `Direct routing for model "${request.model}" → provider "${directMatch.key}" (${directMatch.config.type})`,
-        );
-        const providerInstance = this.providersService.getProvider(
-          directMatch.config.type,
-        );
-        const originalTokens = this.estimateTokens(request.messages);
-        const processed = this.contextService.process(request.messages, {
-          maxTokens: this.resolveContextLimit(directMatch.config),
-        });
-        request.messages = processed.messages;
-
-        const cacheInput = JSON.stringify(request.messages);
-        const cached = await this.cacheService.findSimilar(cacheInput);
-        if (cached) {
-          return {
-            response: { data: cached.response },
-            metadata: {
-              mode: 'direct',
-              escalated: false,
-              providerKey: directMatch.key,
-              providerType: directMatch.config.type,
-              model: directMatch.config.model,
-              originalTokens,
-              finalTokens: this.estimateTokens(request.messages),
-            },
-          };
-        }
-
-        const metadata: RouteMetadata = {
-          mode: 'direct',
-          escalated: false,
-          providerKey: directMatch.key,
-          providerType: directMatch.config.type,
-          model: directMatch.config.model,
-          originalTokens,
-          finalTokens: this.estimateTokens(request.messages),
-        };
-        const { response, toolCalls, iterations, toolErrors } = await this.callWithRoutingMetadata(
-          () => this.callProviderOrToolLoop(request, directMatch.config),
-          metadata,
-        );
-
-        if (response.data) {
-          await this.cacheService.store(
-            request.messages,
-            response.data,
-            originalTokens - this.estimateTokens(request.messages),
-          );
-        }
-
-        return { response, metadata: { ...metadata, toolCalls, iterations, toolErrors } };
-      }
-      this.logger.debug(
-        `Model "${request.model}" not found in providers config, falling back to classifier routing.`,
-      );
-    }
-
-    // 3. Classifier-based routing with confidence evaluation
-    // Use only the last user message so the classifier isn't dominated by the system prompt
-    const userInput = this.lastUserMessage(request.messages);
-    const classification =
-      await this.classifierService.classifyTask(userInput);
-
-    this.logger.debug(
-      `Classifier: mode=${classification.mode}, confidence=${classification.confidence.toFixed(3)}`,
+    // Resolve model using ModelResolverService
+    const resolved = await this.modelResolverService.resolveModel(
+      request.model || 'madame-auto',
+      request.messages,
     );
 
-    // 4. Confidence Engine: decide if we need to escalate
-    const decision = this.confidenceEngine.evaluate(classification);
-    const selectedProviderKey = decision.targetProviderKey;
-
-    if (!selectedProviderKey) {
-      throw new Error(
-        `No provider selected: routing config missing for mode=${classification.mode}, escalation=${decision.shouldEscalate}`,
-      );
-    }
-
-    const modelConfig = providersConfig[selectedProviderKey];
-
-    if (!modelConfig) {
-      throw new Error(
-        `Provider configuration missing for key: ${selectedProviderKey}`,
-      );
-    }
-
-    if (decision.shouldEscalate) {
-      this.logger.log(
-        `Escalating: confidence ${classification.confidence.toFixed(3)} < threshold ${decision.threshold} → ${selectedProviderKey} (${modelConfig.type} - ${modelConfig.model})`,
-      );
-    } else {
-      this.logger.log(
-        `Classifier routing to: ${selectedProviderKey} (${modelConfig.type} - ${modelConfig.model})`,
-      );
-    }
+    const modelConfig = resolved.config;
+    const providerKey = resolved.providerKey;
+    const escalated = resolved.escalated;
 
     const originalTokens = this.estimateTokens(request.messages);
     const processed = this.contextService.process(request.messages, {
@@ -504,11 +397,11 @@ export class RouterService implements OnModuleInit {
       return {
         response: { data: cached.response },
         metadata: {
-          mode: 'classifier',
-          classifierMode: classification.mode,
-          confidence: classification.confidence,
-          escalated: decision.shouldEscalate,
-          providerKey: selectedProviderKey,
+          mode: resolved.classification ? 'classifier' : 'direct',
+          classifierMode: resolved.classification?.mode as any,
+          confidence: resolved.classification?.confidence,
+          escalated,
+          providerKey,
           providerType: modelConfig.type,
           model: modelConfig.model,
           originalTokens,
@@ -518,107 +411,20 @@ export class RouterService implements OnModuleInit {
     }
 
     const metadata: RouteMetadata = {
-      mode: 'classifier',
-      classifierMode: classification.mode,
-      confidence: classification.confidence,
-      escalated: decision.shouldEscalate,
-      providerKey: selectedProviderKey,
+      mode: resolved.classification ? 'classifier' : 'direct',
+      classifierMode: resolved.classification?.mode as any,
+      confidence: resolved.classification?.confidence,
+      escalated,
+      providerKey,
       providerType: modelConfig.type,
       model: modelConfig.model,
       originalTokens,
       finalTokens: this.estimateTokens(request.messages),
       iterations: 0,
     };
+
     const { response, toolCalls, iterations, toolErrors } = await this.callWithRoutingMetadata(
       () => this.callProviderOrToolLoop(request, modelConfig),
-      metadata,
-    );
-
-    if (response.data) {
-      await this.cacheService.store(
-        request.messages,
-        response.data,
-        originalTokens - this.estimateTokens(request.messages),
-      );
-    }
-
-    return { response, metadata: { ...metadata, toolCalls, iterations, toolErrors } };
-  }
-
-  private async routeThroughPair(
-    request: ChatCompletionRequest,
-    providersConfig: Record<string, any>,
-    pair: { id: string; name: string; local: string; cloud: string },
-  ): Promise<RouteResult> {
-    const localConfig = providersConfig[pair.local];
-    if (!localConfig) {
-      throw new Error(`Local provider "${pair.local}" not found for pair "${pair.name}"`);
-    }
-    const cloudConfig = providersConfig[pair.cloud];
-    if (!cloudConfig) {
-      throw new Error(`Cloud provider "${pair.cloud}" not found for pair "${pair.name}"`);
-    }
-
-    // Detect OpenCode mode from system prompt — this takes priority over classifier
-    const systemMode = this.detectMode(request.messages);
-
-    // Run classifier on the last user message only (not the system prompt)
-    const userInput = this.lastUserMessage(request.messages);
-    const classification = await this.classifierService.classifyTask(userInput);
-    const decision = this.confidenceEngine.evaluate(classification);
-
-    // Only "plan" mode forces escalation — OpenCode is planning and needs the smartest model.
-    // "Build" mode falls back to the classifier: if it detects a complex task, escalate.
-    const shouldEscalate = systemMode === 'plan' ? true : classification.mode === 'plan' || decision.shouldEscalate;
-    const selectedConfig = shouldEscalate ? cloudConfig : localConfig;
-    const providerKey = shouldEscalate ? pair.cloud : pair.local;
-    const providerType = selectedConfig.type;
-
-    this.logger.log(
-      `Pair "${pair.name}": systemMode=${systemMode}, mode=${classification.mode}, confidence=${classification.confidence.toFixed(3)}` +
-        (shouldEscalate
-          ? ` → ESCALATING to ${pair.cloud} (${selectedConfig.model})`
-          : ` → using local ${pair.local} (${selectedConfig.model})`),
-    );
-
-    const originalTokens = this.estimateTokens(request.messages);
-    const processed = this.contextService.process(request.messages, {
-      maxTokens: this.resolveContextLimit(selectedConfig),
-    });
-    request.messages = processed.messages;
-
-    const cacheInput = JSON.stringify(request.messages);
-    const cached = await this.cacheService.findSimilar(cacheInput);
-    if (cached) {
-      return {
-        response: { data: cached.response },
-        metadata: {
-          mode: 'classifier',
-          classifierMode: classification.mode,
-          confidence: classification.confidence,
-          escalated: shouldEscalate,
-          providerKey,
-          providerType,
-          model: selectedConfig.model,
-          originalTokens,
-          finalTokens: this.estimateTokens(request.messages),
-        },
-      };
-    }
-
-    const metadata: RouteMetadata = {
-      mode: 'classifier',
-      classifierMode: classification.mode,
-      confidence: classification.confidence,
-      escalated: shouldEscalate,
-      providerKey,
-      providerType,
-      model: selectedConfig.model,
-      originalTokens,
-      finalTokens: this.estimateTokens(request.messages),
-    };
-    const { response, toolCalls, iterations, toolErrors } = await this.callWithRoutingMetadata(
-      () => this.callProviderOrToolLoop(request, selectedConfig),
       metadata,
     );
 
@@ -663,76 +469,9 @@ export class RouterService implements OnModuleInit {
     return { response, toolCalls: undefined, iterations: 1, toolErrors: undefined };
   }
 
-  private lastUserMessage(messages: any[]): string {
-    if (!messages || messages.length === 0) return '';
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        const content = messages[i].content;
-        return typeof content === 'string' ? content : JSON.stringify(content);
-      }
-    }
-    return '';
-  }
-
-  private detectMode(messages: any[]): 'plan' | 'build' | null {
-    const systemMsg = messages.find(m => m.role === 'system');
-    if (!systemMsg || typeof systemMsg.content !== 'string') return null;
-
-    const content = systemMsg.content.toLowerCase();
-    if (content.includes('modo de planificación') || content.includes('planning mode') || content.includes('plan mode')) {
-      return 'plan';
-    }
-    if (content.includes('modo de desarrollo activo') || content.includes('active development mode') || content.includes('build mode')) {
-      return 'build';
-    }
-    return null;
-  }
-
   private estimateTokens(messages: any[]): number {
     const text = JSON.stringify(messages);
     return Math.ceil(text.length / 3.5);
-  }
-
-  /**
-   * Finds a provider configuration whose 'model' field matches the requested model name.
-   */
-  private findProviderByModel(
-    modelName: string,
-    providersConfig: Record<string, any>,
-  ): { key: string; config: any } | null {
-    if (providersConfig[modelName]) {
-      return { key: modelName, config: providersConfig[modelName] };
-    }
-    for (const [key, config] of Object.entries(providersConfig)) {
-      if (config.model === modelName) {
-        return { key, config };
-      }
-    }
-    return null;
-  }
-
-  private findModelPair(
-    modelName: string,
-    modelPairs: any[],
-  ): { id: string; name: string; local: string; cloud: string } | null {
-    for (const pair of modelPairs) {
-      if (pair.name === modelName || pair.id === modelName) {
-        return pair;
-      }
-    }
-    return null;
-  }
-
-  private findOrchestratorPair(
-    modelName: string,
-    orchestratorPairs: any[],
-  ): { id: string; name: string; orchestrator: string; subagents: string[] } | null {
-    for (const pair of orchestratorPairs) {
-      if (pair.name === modelName || pair.id === modelName) {
-        return pair;
-      }
-    }
-    return null;
   }
 
   private getDelegationToolDefinition() {

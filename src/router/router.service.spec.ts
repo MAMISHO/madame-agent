@@ -4,6 +4,7 @@ import { RouterService } from './router.service';
 import { ProvidersService } from '../providers/providers.service';
 import { ClassifierService } from '../classifier/classifier.service';
 import { ConfidenceEngineService } from '../confidence/confidence.service';
+import { ModelResolverService } from './model-resolver.service';
 import { ContextService } from '../context/context.service';
 import { ChatCompletionRequest } from '../proxy/dto/openai.dto';
 import {
@@ -92,6 +93,7 @@ describe('RouterService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RouterService,
+        ModelResolverService,
         ConfidenceEngineService,
         {
           provide: ConfigService,

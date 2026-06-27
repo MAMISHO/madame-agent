@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { RouterService } from './router.service';
 import { WorkflowService } from './workflow.service';
 import { SessionManager } from './session.manager';
+import { ModelResolverService } from './model-resolver.service';
 import { ProvidersModule } from '../providers/providers.module';
 import { ClassifierModule } from '../classifier/classifier.module';
 import { ConfidenceModule } from '../confidence/confidence.module';
@@ -24,7 +25,7 @@ import { HarnessModule } from '../harness/harness.module';
     ObservabilityModule,
     HarnessModule,
   ],
-  providers: [RouterService, WorkflowService, SessionManager],
-  exports: [RouterService, WorkflowService, SessionManager],
+  providers: [RouterService, WorkflowService, SessionManager, ModelResolverService],
+  exports: [RouterService, WorkflowService, SessionManager, ModelResolverService],
 })
 export class RouterModule {}
