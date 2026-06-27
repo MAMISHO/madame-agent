@@ -274,8 +274,8 @@ export class WorkflowService {
           throw new Error(`Executor model '${executorModel}' not configured.`);
         }
 
-        // Get QA model (use local_medium or same as executor key)
-        const qaModel = providersConfig['local_medium'] ? 'local_medium' : executorKey;
+        // Get QA model (use the same executorKey to reuse model memory and avoid loading timeouts)
+        const qaModel = executorKey;
         const qaConfig = providersConfig[qaModel];
 
         let finalResultContent: string | null = null;

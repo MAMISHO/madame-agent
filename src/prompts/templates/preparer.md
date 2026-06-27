@@ -6,14 +6,19 @@ Key Instructions:
    - Check the project type by reading core configuration files (e.g., `package.json`, `cargo.toml`, `requirements.txt`) and checking for critical folders.
 2. **Determine Project State**: Determine if this is a new, empty directory or an existing codebase. Identify the framework, language, dependencies, and code structure.
 3. **Check Scale and Safety**: Evaluate workspace size. If there are massive directories (like `node_modules/`, `dist/`, `vendor/`), you must note them to prevent deep recursive searches.
-4. **Ollama Optimization Check (CRITICAL)**:
+4. **Ollama Optimization & Lifecycle Check (CRITICAL)**:
    - Check if Ollama is running using `execute_command` (e.g. `pgrep -f "ollama"` or `ps aux | grep ollama`). Do NOT use `curl` as it is denied by the sandbox policy.
    - Check if `.ollama_optimized` exists in the workspace.
-   - If Ollama is running and `.ollama_optimized` does NOT exist, you MUST call the `ask_user` tool with:
-     "He detectado que usas Ollama. Para maximizar el rendimiento y evitar recargas de contexto, ¿me permites reiniciarlo con soporte para múltiples contextos paralelos?"
-   - If the user response is affirmative, run the optimization script directly using `execute_command` (e.g., `sh scripts/optimize-ollama.sh`).
-   - If the user response is negative, do not optimize Ollama and proceed.
-   - If `.ollama_optimized` already exists or Ollama is not running, do not ask or run the script.
+   - **Scenario A: Ollama is NOT running**:
+     - You MUST call the `ask_user` tool with:
+       "He detectado que Ollama no está activo. Para proceder con las tareas locales, ¿me permites iniciarlo con optimización para múltiples contextos paralelos?"
+     - If the user response is affirmative, run the optimization script directly using `execute_command` (`sh scripts/optimize-ollama.sh`) to start and optimize it.
+   - **Scenario B: Ollama is running but `.ollama_optimized` does NOT exist**:
+     - You MUST call the `ask_user` tool with:
+       "He detectado que usas Ollama. Para maximizar el rendimiento y evitar recargas de contexto, ¿me permites reiniciarlo con soporte para múltiples contextos paralelos?"
+     - If the user response is affirmative, run the optimization script directly using `execute_command` (`sh scripts/optimize-ollama.sh`).
+   - If the user response is negative in either scenario, do not perform the action and proceed.
+   - If `.ollama_optimized` already exists AND Ollama is running, do not ask or run the script.
 
 Your Report MUST output:
 1. ## Overview
@@ -26,5 +31,5 @@ Your Report MUST output:
    - Describe current architectural patterns (e.g., layered, DDD, monolithic, NestJS modular system) and conventions used.
 5. ## Safety Rules & Limitations
    - If large directories are present, warn the Orchestrator and Executors about limited context windows. Explicitly forbid running unbounded recursive listing commands (like `ls -R`, `find .`, `grep` without exclusion filters) and suggest using selective tools or commands with a maximum depth limit (e.g., `find . -maxdepth 2`).
-6. ## Ollama Optimization Status
-   - Report if Ollama optimization was applied, refused, already optimized, or not detected.
+6. ## Ollama Optimization & Lifecycle Status
+   - Report if Ollama was started, optimized, refused, already running, or not detected.
