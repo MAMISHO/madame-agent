@@ -5,6 +5,7 @@ import { ChatCompletionRequest } from './dto/openai.dto';
 import { ConfigService } from '@nestjs/config';
 import { ObservabilityService } from '../observability/observability.service';
 import { CostTrackerService } from '../observability/cost-tracker.service';
+import { createHash } from 'crypto';
 
 let requestCounter = 0;
 
@@ -140,12 +141,34 @@ export class ProxyController {
       req.headers['x-client-id'] ||
       (userAgent.toLowerCase().includes('opencode') ? 'opencode' : undefined);
 
-    if (harness) {
-      body.metadata = {
-        ...body.metadata,
-        harness: typeof harness === 'string' ? harness : String(harness),
-      };
+    let sessionId = (body.metadata?.sessionId || req.headers['x-session-id']) as string;
+    if (!sessionId) {
+      const referer = req.headers['referer'] as string;
+      if (referer) {
+        const match = referer.match(/session\/(ses_[a-zA-Z0-9]+)/);
+        if (match) {
+          sessionId = match[1];
+        }
+      }
     }
+    if (!sessionId && body.user) {
+      sessionId = body.user;
+    }
+    if (!sessionId && body.messages && body.messages.length > 0) {
+      const firstUserMsg = body.messages.find(m => m.role === 'user');
+      if (firstUserMsg && typeof firstUserMsg.content === 'string') {
+        sessionId = 'hash_' + createHash('md5').update(firstUserMsg.content).digest('hex');
+      }
+    }
+    if (!sessionId) {
+      sessionId = 'default-session';
+    }
+
+    body.metadata = {
+      ...body.metadata,
+      harness: harness ? (typeof harness === 'string' ? harness : String(harness)) : undefined,
+      sessionId,
+    };
 
     this.observability.startTimer(requestId);
 

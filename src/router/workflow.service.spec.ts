@@ -12,6 +12,7 @@ import { ObservabilityService } from '../observability/observability.service';
 import { ChatCompletionRequest } from '../proxy/dto/openai.dto';
 import { ValidatorService } from '../tools/validator.service';
 import { HarnessService } from '../harness/harness.service';
+import { SessionManager } from './session.manager';
 
 describe('WorkflowService', () => {
   let workflowService: WorkflowService;
@@ -53,6 +54,7 @@ describe('WorkflowService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkflowService,
+        SessionManager,
         {
           provide: ConfigService,
           useValue: {
@@ -167,10 +169,13 @@ describe('WorkflowService', () => {
           useValue: {
             getStrategy: jest.fn().mockReturnValue({
               name: 'cli',
-              parseRequest: jest.fn().mockImplementation((messages) => ({
-                userMessage: 'test task',
-                isInterventionReply: false,
-              })),
+              parseRequest: jest.fn().mockImplementation((messages) => {
+                const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                return {
+                  userMessage: lastUser && typeof lastUser.content === 'string' ? lastUser.content : 'test task',
+                  isInterventionReply: false,
+                };
+              }),
               formatInterventionResponse: jest.fn().mockImplementation((requestId, question, orchestratorConfig) => ({
                 response: {
                   data: {
@@ -264,7 +269,7 @@ describe('WorkflowService', () => {
           { role: 'system', content: 'mock prompt for orchestrator-delegate' },
           {
             role: 'user',
-            content: 'Original Task: test task\n\nImplementation Plan:\nmock planner plan content\n\nEnvironment Status:\nmock environment report content',
+            content: `Original Task: test task\n\nEnvironment Status:\nmock environment report content\n\nImplementation Plan:\nmock planner plan content\n\nPrevious Execution Steps:\nNo execution history yet\n\nLatest User Input/Feedback:\ntest task`,
           },
         ],
       }),
@@ -307,5 +312,85 @@ describe('WorkflowService', () => {
 
     // Expect the final result to be returned successfully
     expect(resumeResult.response.data.choices[0].message.content).toBe('mock orchestrator final content');
+  });
+
+  it('should skip Preparer and Planner on second turn if user input is confirmation', async () => {
+    const pair = {
+      id: 'test-pair',
+      name: 'Test Pair',
+      orchestrator: 'cloud_nvidia',
+      subagents: ['local_medium'],
+    };
+
+    // First Turn (Initial Setup)
+    const request1: ChatCompletionRequest = {
+      model: 'cloud_nvidia',
+      messages: [{ role: 'user', content: 'test task' }],
+      metadata: { sessionId: 'test-sess-1' },
+    };
+
+    jest.spyOn(toolLoopService, 'execute');
+    jest.spyOn(mockProvider, 'chat');
+
+    await workflowService.executeWorkflow(request1, pair);
+
+    expect(toolLoopService.execute).toHaveBeenCalledTimes(2); // Preparer + Orchestrator
+    expect(mockProvider.chat).toHaveBeenCalledTimes(1); // Planner
+
+    // Reset mocks for Turn 2
+    jest.clearAllMocks();
+
+    // Turn 2 (Confirmation)
+    const request2: ChatCompletionRequest = {
+      model: 'cloud_nvidia',
+      messages: [{ role: 'user', content: 'sí' }],
+      metadata: { sessionId: 'test-sess-1' },
+    };
+
+    const result = await workflowService.executeWorkflow(request2, pair);
+
+    // Preparer should be skipped (0 times toolLoop prep)
+    // Planner should be skipped (0 times mockProvider.chat)
+    // Orchestrator should run (1 time toolLoop exec)
+    expect(toolLoopService.execute).toHaveBeenCalledTimes(1);
+    expect(mockProvider.chat).toHaveBeenCalledTimes(0);
+    expect(result.response.data.choices[0].message.content).toBe('mock orchestrator final content');
+  });
+
+  it('should skip Preparer but re-run Planner on second turn if user input is feedback', async () => {
+    const pair = {
+      id: 'test-pair',
+      name: 'Test Pair',
+      orchestrator: 'cloud_nvidia',
+      subagents: ['local_medium'],
+    };
+
+    // First Turn
+    const request1: ChatCompletionRequest = {
+      model: 'cloud_nvidia',
+      messages: [{ role: 'user', content: 'test task' }],
+      metadata: { sessionId: 'test-sess-2' },
+    };
+
+    await workflowService.executeWorkflow(request1, pair);
+
+    // Reset mocks for Turn 2
+    jest.clearAllMocks();
+
+    // Turn 2 (Feedback)
+    const request2: ChatCompletionRequest = {
+      model: 'cloud_nvidia',
+      messages: [{ role: 'user', content: 'cambia el puerto a 8080' }],
+      metadata: { sessionId: 'test-sess-2' },
+    };
+
+    const result = await workflowService.executeWorkflow(request2, pair);
+
+    // Preparer should be skipped (0 times toolLoop prep)
+    // Planner should be called (1 time mockProvider.chat)
+    // Orchestrator should run (1 time toolLoop exec)
+    expect(toolLoopService.execute).toHaveBeenCalledTimes(1); // Orchestrator only
+    expect(mockProvider.chat).toHaveBeenCalledTimes(1); // Re-run Planner
+    expect(result.response.data.choices[0].message.content).toBe('mock orchestrator final content');
   });
 });
