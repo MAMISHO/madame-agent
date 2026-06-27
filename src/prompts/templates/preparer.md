@@ -7,18 +7,20 @@ Key Instructions:
 2. **Determine Project State**: Determine if this is a new, empty directory or an existing codebase. Identify the framework, language, dependencies, and code structure.
 3. **Check Scale and Safety**: Evaluate workspace size. If there are massive directories (like `node_modules/`, `dist/`, `vendor/`), you must note them to prevent deep recursive searches.
 4. **Ollama Optimization & Lifecycle Check (CRITICAL)**:
-   - Check if Ollama is running using `execute_command` (e.g. `pgrep -f "ollama"` or `ps aux | grep ollama`). Do NOT use `curl` as it is denied by the sandbox policy.
+   - Do NOT use `pgrep -f "ollama"` to check if Ollama is active, as it can match unrelated processes or IDE plugins.
+   - INSTEAD, check if the Ollama server is active and responsive on its default port by running `execute_command` with:
+     `curl -s http://127.0.0.1:11434/` or `nc -z 127.0.0.1 11434`
    - Check if `.ollama_optimized` exists in the workspace.
-   - **Scenario A: Ollama is NOT running**:
+   - **Scenario A: Ollama port is NOT open/responsive**:
      - You MUST call the `ask_user` tool with:
        "He detectado que Ollama no está activo. Para proceder con las tareas locales, ¿me permites iniciarlo con optimización para múltiples contextos paralelos?"
      - If the user response is affirmative, run the optimization script directly using `execute_command` (`sh scripts/optimize-ollama.sh`) to start and optimize it.
-   - **Scenario B: Ollama is running but `.ollama_optimized` does NOT exist**:
+   - **Scenario B: Ollama port is responsive, but `.ollama_optimized` does NOT exist**:
      - You MUST call the `ask_user` tool with:
        "He detectado que usas Ollama. Para maximizar el rendimiento y evitar recargas de contexto, ¿me permites reiniciarlo con soporte para múltiples contextos paralelos?"
      - If the user response is affirmative, run the optimization script directly using `execute_command` (`sh scripts/optimize-ollama.sh`).
    - If the user response is negative in either scenario, do not perform the action and proceed.
-   - If `.ollama_optimized` already exists AND Ollama is running, do not ask or run the script.
+   - If `.ollama_optimized` already exists AND Ollama port is open/responsive, do not ask or run the script.
 
 Your Report MUST output:
 1. ## Overview
