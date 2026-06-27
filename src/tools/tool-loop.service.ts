@@ -270,7 +270,13 @@ export class ToolLoopService {
             content: JSON.stringify(result),
           });
         } catch (err: any) {
-          if (err instanceof FatalToolError || err.name === 'FatalToolError' || err.isFatal) {
+          if (
+            err instanceof FatalToolError || 
+            err.name === 'FatalToolError' || 
+            err.isFatal || 
+            err instanceof UserInteractionRequiredError || 
+            err.name === 'UserInteractionRequiredError'
+          ) {
             throw err;
           }
           const latencyMs = Date.now() - toolStart;
