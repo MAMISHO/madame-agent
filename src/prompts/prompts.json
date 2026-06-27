@@ -64,6 +64,13 @@
       "file": "qa.md"
     },
     {
+      "id": "subagent-base",
+      "description": "Base prompt for local subagents.",
+      "agentSource": "orchestrator",
+      "agentTarget": "subagent-base",
+      "file": "subagent-base.md"
+    },
+    {
       "id": "supervisor",
       "description": "Transversal Supervisor agent template for monitoring telemetry and injecting overrides.",
       "agentSource": "system",

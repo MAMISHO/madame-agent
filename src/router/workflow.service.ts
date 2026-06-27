@@ -6,7 +6,7 @@ import { ProvidersService } from '../providers/providers.service';
 import { PromptService } from '../prompts/prompt.service';
 import { AgentLoggerService } from '../utils/agent-logger.service';
 import { ToolRegistryService } from '../tools/tool-registry.service';
-import { ToolLoopService, FatalToolError } from '../tools/tool-loop.service';
+import { ToolLoopService, FatalToolError, UserInteractionRequiredError } from '../tools/tool-loop.service';
 import { SkillManagerService } from '../tools/skill-manager.service';
 import { SkillScraperService } from '../tools/skill-scraper.service';
 import { ValidatorService } from '../tools/validator.service';
@@ -31,6 +31,8 @@ interface TelemetryEntry {
 @Injectable()
 export class WorkflowService {
   private readonly logger = new Logger(WorkflowService.name);
+  private pendingRequests = new Map<string, { request: ChatCompletionRequest; pair: any }>();
+  private userResponses = new Map<string, string>();
 
   constructor(
     private configService: ConfigService,
@@ -50,142 +52,191 @@ export class WorkflowService {
     pair: { id: string; name: string; orchestrator: string; subagents: string[] },
   ): Promise<any> {
     const parentRequestId = request.requestId || `req_${randomUUID().slice(0, 8)}`;
+    request.requestId = parentRequestId;
     const userMessage = this.lastUserMessage(request.messages);
 
     this.agentLogger.log('System', `Executing multi-agent workflow for request: "${userMessage.slice(0, 100)}..."`, parentRequestId);
 
-    // Get Orchestrator model config
     const providersConfig = this.configService.get('providers') || {};
     const orchestratorConfig = providersConfig[pair.orchestrator];
     if (!orchestratorConfig) {
       throw new Error(`Orchestrator provider "${pair.orchestrator}" not found for pair "${pair.name}"`);
     }
 
-    let preparerText = '';
-
-    // 1. Register Custom Executor/QA delegate_subagent tool
-    this.registerCustomDelegationTool(pair, parentRequestId, () => preparerText);
-
-    // 2. Environment Preparer Agent (Cloud)
-    this.agentLogger.log('Preparer', 'Verifying environment and configuring context...', parentRequestId);
-    const preparerPrompt = this.promptService.loadPrompt('preparer');
-    const preparerRequest: ChatCompletionRequest = {
-      model: pair.orchestrator,
-      messages: [
-        { role: 'system', content: preparerPrompt },
-        { role: 'user', content: `Task: ${userMessage}` },
-      ],
-      tools: [
-        this.getDelegationToolDefinition(pair.subagents),
-      ],
-      tool_choice: 'required',
-      requestId: `prep_${randomUUID().slice(0, 8)}`,
-      parentRequestId,
-    };
-    const preparerResult = await this.toolLoop.execute(preparerRequest, orchestratorConfig);
-    preparerText = preparerResult.response.data?.choices?.[0]?.message?.content || 'Environment ready';
-    
-    this.agentLogger.log('Preparer', `Environment Report:\n${preparerText.slice(0, 200)}...`, parentRequestId);
-
-    // 3. Planner Agent (Cloud)
-    this.agentLogger.log('Planner', 'Generating technical implementation plan...', parentRequestId);
-    const plannerPrompt = this.promptService.loadPrompt('planner');
-    const plannerRequest: ChatCompletionRequest = {
-      model: pair.orchestrator,
-      messages: [
-        { role: 'system', content: plannerPrompt },
-        { role: 'user', content: `Task: ${userMessage}\n\nEnvironment Report:\n${preparerText}` },
-      ],
-      requestId: `plan_${randomUUID().slice(0, 8)}`,
-      parentRequestId,
-    };
-    const plannerResponse = await this.providersService.getProvider(orchestratorConfig.type).chat(plannerRequest, orchestratorConfig);
-    const planText = plannerResponse.data?.choices?.[0]?.message?.content || 'No plan generated';
-    
-    this.agentLogger.log('Planner', `Plan generated:\n${planText.slice(0, 300)}...`, parentRequestId);
-
-    // 4. Orchestrator Agent (Cloud) - Main Outer Loop
-    this.agentLogger.log('Orchestrator', 'Orchestration loop started.', parentRequestId);
-    
-    // System instructions for outer Orchestrator
-    const orchestratorPrompt = this.promptService.loadPrompt('orchestrator-delegate');
-    
-    // Inject the plan and preparer report directly into the user message context
-    const enrichedMessages: Message[] = [
-      { role: 'system', content: orchestratorPrompt },
-      { 
-        role: 'user', 
-        content: `Original Task: ${userMessage}\n\nImplementation Plan:\n${planText}\n\nEnvironment Status:\n${preparerText}` 
-      },
-    ];
-
-    const searchSkills = this.toolRegistry.getDefinitions().find(t => t.function.name === 'search_skills');
-    
-    const orchestratorRequest: ChatCompletionRequest = {
-      model: pair.orchestrator,
-      messages: enrichedMessages,
-      tools: [
-        this.getDelegationToolDefinition(pair.subagents),
-        ...(searchSkills ? [searchSkills] : [])
-      ],
-      requestId: parentRequestId,
-      tool_choice: 'required',
-    };
-
-    // Run the orchestrator using ToolLoopService
-    this.agentLogger.log('Orchestrator', `Executing orchestrator model: "${pair.orchestrator}"`, parentRequestId);
-    const startMs = Date.now();
     try {
-      const result = await this.toolLoop.execute(orchestratorRequest, orchestratorConfig);
-      const endMs = Date.now() - startMs;
+      this.pendingRequests.set(parentRequestId, { request, pair });
 
-      this.agentLogger.log('System', `Workflow completed in ${endMs}ms`, parentRequestId);
+      let preparerText = '';
 
-      return {
-        response: result.response,
-        metadata: {
-          mode: 'orchestrator',
-          escalated: false,
-          providerKey: pair.orchestrator,
-          providerType: orchestratorConfig.type,
-          model: orchestratorConfig.model,
-          originalTokens: Math.ceil(JSON.stringify(request.messages).length / 3.5),
-          finalTokens: Math.ceil(JSON.stringify(orchestratorRequest.messages).length / 3.5),
-          iterations: result.iterations,
-          toolCalls: result.toolCalls,
-          toolErrors: result.errors,
-        },
+      // 1. Register Custom Executor/QA delegate_subagent tool
+      this.registerCustomDelegationTool(pair, parentRequestId, () => preparerText);
+
+      // 2. Environment Preparer Agent (Cloud)
+      this.agentLogger.log('Preparer', 'Verifying environment and configuring context...', parentRequestId);
+      const preparerPrompt = this.promptService.loadPrompt('preparer');
+      const preparerRequest: ChatCompletionRequest = {
+        model: pair.orchestrator,
+        messages: [
+          { role: 'system', content: preparerPrompt },
+          { role: 'user', content: `Task: ${userMessage}` },
+        ],
+        tools: [
+          this.getDelegationToolDefinition(pair.subagents),
+          this.toolRegistry.getDefinitions().find(t => t.function.name === 'ask_user'),
+        ].filter(Boolean) as any,
+        tool_choice: 'required',
+        requestId: `prep_${randomUUID().slice(0, 8)}`,
+        parentRequestId,
       };
-    } catch (err: any) {
-      const endMs = Date.now() - startMs;
-      this.agentLogger.error('System', `Workflow aborted due to fatal error after ${endMs}ms: ${err.message}`, parentRequestId);
-      return {
-        response: {
-          data: {
-            choices: [
-              {
-                message: {
-                  role: 'assistant',
-                  content: `⚠️ **[ERROR DE INFRAESTRUCTURA]** La tarea no pudo completarse debido a un fallo crítico en la comunicación con el proveedor de IA (${orchestratorConfig?.model || 'LLM'}):\n\n\`\`\`\n${err.message}\n\`\`\`\n\nPor favor, comprueba que los servicios locales (como Ollama) estén activos o que la conexión a internet sea estable e inténtalo de nuevo.`,
-                },
-              },
-            ],
+      const preparerResult = await this.toolLoop.execute(
+        preparerRequest,
+        orchestratorConfig,
+        undefined,
+        {
+          parentRequestId,
+          userResponses: this.userResponses,
+        }
+      );
+      preparerText = preparerResult.response.data?.choices?.[0]?.message?.content || 'Environment ready';
+      
+      this.agentLogger.log('Preparer', `Environment Report:\n${preparerText.slice(0, 200)}...`, parentRequestId);
+
+      // 3. Planner Agent (Cloud)
+      this.agentLogger.log('Planner', 'Generating technical implementation plan...', parentRequestId);
+      const plannerPrompt = this.promptService.loadPrompt('planner');
+      const plannerRequest: ChatCompletionRequest = {
+        model: pair.orchestrator,
+        messages: [
+          { role: 'system', content: plannerPrompt },
+          { role: 'user', content: `Task: ${userMessage}\n\nEnvironment Report:\n${preparerText}` },
+        ],
+        requestId: `plan_${randomUUID().slice(0, 8)}`,
+        parentRequestId,
+      };
+      const plannerResponse = await this.providersService.getProvider(orchestratorConfig.type).chat(plannerRequest, orchestratorConfig);
+      const planText = plannerResponse.data?.choices?.[0]?.message?.content || 'No plan generated';
+      
+      this.agentLogger.log('Planner', `Plan generated:\n${planText.slice(0, 300)}...`, parentRequestId);
+
+      // 4. Orchestrator Agent (Cloud) - Main Outer Loop
+      this.agentLogger.log('Orchestrator', 'Orchestration loop started.', parentRequestId);
+      
+      // System instructions for outer Orchestrator
+      const orchestratorPrompt = this.promptService.loadPrompt('orchestrator-delegate');
+      
+      // Inject the plan and preparer report directly into the user message context
+      const enrichedMessages: Message[] = [
+        { role: 'system', content: orchestratorPrompt },
+        { 
+          role: 'user', 
+          content: `Original Task: ${userMessage}\n\nImplementation Plan:\n${planText}\n\nEnvironment Status:\n${preparerText}` 
+        },
+      ];
+
+      const searchSkills = this.toolRegistry.getDefinitions().find(t => t.function.name === 'search_skills');
+      
+      const orchestratorRequest: ChatCompletionRequest = {
+        model: pair.orchestrator,
+        messages: enrichedMessages,
+        tools: [
+          this.getDelegationToolDefinition(pair.subagents),
+          ...(searchSkills ? [searchSkills] : [])
+        ],
+        requestId: parentRequestId,
+        tool_choice: 'required',
+      };
+
+      // Run the orchestrator using ToolLoopService
+      this.agentLogger.log('Orchestrator', `Executing orchestrator model: "${pair.orchestrator}"`, parentRequestId);
+      const startMs = Date.now();
+      try {
+        const result = await this.toolLoop.execute(orchestratorRequest, orchestratorConfig);
+        const endMs = Date.now() - startMs;
+
+        this.agentLogger.log('System', `Workflow completed in ${endMs}ms`, parentRequestId);
+
+        return {
+          response: result.response,
+          metadata: {
+            mode: 'orchestrator',
+            escalated: false,
+            providerKey: pair.orchestrator,
+            providerType: orchestratorConfig.type,
+            model: orchestratorConfig.model,
+            originalTokens: Math.ceil(JSON.stringify(request.messages).length / 3.5),
+            finalTokens: Math.ceil(JSON.stringify(orchestratorRequest.messages).length / 3.5),
+            iterations: result.iterations,
+            toolCalls: result.toolCalls,
+            toolErrors: result.errors,
           },
-        } as any,
-        metadata: {
-          mode: 'orchestrator',
-          escalated: false,
-          providerKey: pair.orchestrator,
-          providerType: orchestratorConfig.type,
-          model: orchestratorConfig.model,
-          originalTokens: 0,
-          finalTokens: 0,
-          iterations: 0,
-          toolCalls: [],
-          toolErrors: [err.message],
-        },
-      };
+        };
+      } catch (err: any) {
+        const endMs = Date.now() - startMs;
+        this.agentLogger.error('System', `Workflow aborted due to fatal error after ${endMs}ms: ${err.message}`, parentRequestId);
+        return {
+          response: {
+            data: {
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: `⚠️ **[ERROR DE INFRAESTRUCTURA]** La tarea no pudo completarse debido a un fallo crítico en la comunicación con el proveedor de IA (${orchestratorConfig?.model || 'LLM'}):\n\n\`\`\`\n${err.message}\n\`\`\`\n\nPor favor, comprueba que los servicios locales (como Ollama) estén activos o que la conexión a internet sea estable e inténtalo de nuevo.`,
+                  },
+                },
+              ],
+            },
+          } as any,
+          metadata: {
+            mode: 'orchestrator',
+            escalated: false,
+            providerKey: pair.orchestrator,
+            providerType: orchestratorConfig.type,
+            model: orchestratorConfig.model,
+            originalTokens: 0,
+            finalTokens: 0,
+            iterations: 0,
+            toolCalls: [],
+            toolErrors: [err.message],
+          },
+        };
+      }
+    } catch (err: any) {
+      if (err instanceof UserInteractionRequiredError || err.name === 'UserInteractionRequiredError') {
+        this.agentLogger.log('System', `Workflow paused for user interaction: "${err.question}"`, parentRequestId);
+        return {
+          response: {
+            data: {
+              status: 'pending_user_input',
+              requestId: err.requestId || parentRequestId,
+              question: err.question,
+            } as any,
+          },
+          metadata: {
+            mode: 'orchestrator',
+            escalated: false,
+            providerKey: pair.orchestrator,
+            providerType: orchestratorConfig?.type || 'unknown',
+            model: orchestratorConfig?.model || 'unknown',
+            originalTokens: 0,
+            finalTokens: 0,
+            iterations: 0,
+            toolCalls: [],
+            toolErrors: [err.message],
+          },
+        };
+      }
+      throw err;
     }
+  }
+
+  async resumeWorkflow(requestId: string, answer: string): Promise<any> {
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending) {
+      throw new Error(`No pending workflow found for request ID: ${requestId}`);
+    }
+    this.agentLogger.log('System', `Resuming workflow for request ${requestId} with user response: "${answer}"`, requestId);
+    this.userResponses.set(requestId, answer);
+    return this.executeWorkflow(pending.request, pending.pair);
   }
 
   private registerCustomDelegationTool(
@@ -253,7 +304,8 @@ export class WorkflowService {
             this.agentLogger.log('Executor', `Iteration ${iteration}/${maxSubIterations} starting...`, subagentRequestId);
 
             // 1. Build Executor Prompt
-            let executorSystemContent = this.promptService.loadPrompt('executor');
+            const basePrompt = this.promptService.loadPrompt('subagent-base');
+            let executorSystemContent = basePrompt + '\n\n' + this.promptService.loadPrompt('executor');
             if (supervisorOverride) {
               executorSystemContent += `\n\n=== CRITICAL SUPERVISOR OVERRIDE ===\nThe Transversal Supervisor has issued a mandatory override instruction. You MUST obey this override immediately and prioritize it over other rules.\nOverride Instruction: ${supervisorOverride}\n\n`;
             }
@@ -292,6 +344,8 @@ export class WorkflowService {
             // Run Executor using the ToolLoopService
             const executionOptions = {
               validators: this.validatorService.getValidatorsForEnvironment(getPreparerText()),
+              parentRequestId,
+              userResponses: this.userResponses,
             };
 
             const execStart = Date.now();
@@ -377,7 +431,7 @@ export class WorkflowService {
               }
             }
 
-            const qaSystemPrompt = this.promptService.loadPrompt('qa');
+            const qaSystemPrompt = basePrompt + '\n\n' + this.promptService.loadPrompt('qa');
             const qaRequest: ChatCompletionRequest = {
               model: qaModel,
               messages: [

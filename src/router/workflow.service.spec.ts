@@ -10,6 +10,7 @@ import { SkillManagerService } from '../tools/skill-manager.service';
 import { SkillScraperService } from '../tools/skill-scraper.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { ChatCompletionRequest } from '../proxy/dto/openai.dto';
+import { ValidatorService } from '../tools/validator.service';
 
 describe('WorkflowService', () => {
   let workflowService: WorkflowService;
@@ -153,6 +154,13 @@ describe('WorkflowService', () => {
             trackRequest: jest.fn(),
           },
         },
+        {
+          provide: ValidatorService,
+          useValue: {
+            getValidatorsForEnvironment: jest.fn().mockReturnValue([]),
+            getGlobalCheckCommand: jest.fn().mockReturnValue('echo "check"'),
+          },
+        },
       ],
     }).compile();
 
@@ -192,6 +200,11 @@ describe('WorkflowService', () => {
         ],
       }),
       mockProvidersConfig.cloud_nvidia,
+      undefined,
+      expect.objectContaining({
+        parentRequestId: expect.any(String),
+        userResponses: expect.any(Map),
+      })
     );
 
     // 3. Planner was called via chat completion, receiving the environment report
@@ -225,5 +238,59 @@ describe('WorkflowService', () => {
     // 5. Correct result format returned
     expect(result.response.data.choices[0].message.content).toBe('mock orchestrator final content');
     expect(result.metadata.mode).toBe('orchestrator');
+  });
+
+  it('should pause execution with status pending_user_input when ask_user throws UserInteractionRequiredError and resume when requested', async () => {
+    const request: ChatCompletionRequest = {
+      model: 'cloud_nvidia',
+      messages: [{ role: 'user', content: 'test task' }],
+      requestId: 'req_123',
+    };
+
+    const pair = {
+      id: 'test-pair',
+      name: 'Test Pair',
+      orchestrator: 'cloud_nvidia',
+      subagents: ['local_medium'],
+    };
+
+    // First, make the toolLoop mock throw UserInteractionRequiredError
+    const { UserInteractionRequiredError } = require('../tools/tool-loop.service');
+    jest.spyOn(toolLoopService, 'execute')
+      .mockRejectedValueOnce(new UserInteractionRequiredError('Check Ollama?', 'req_123'));
+
+    const result = await workflowService.executeWorkflow(request, pair);
+
+    // Expect workflow to return pending status and the correct question
+    expect(result.response.data.status).toBe('pending_user_input');
+    expect(result.response.data.question).toBe('Check Ollama?');
+    const reqId = result.response.data.requestId;
+    expect(reqId).toBeDefined();
+
+    // Now resume the workflow
+    jest.spyOn(toolLoopService, 'execute').mockResolvedValueOnce({
+      response: {
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'optimized environment report',
+              },
+            },
+          ],
+        },
+      },
+      iterations: 1,
+      toolCallsExecuted: 0,
+      errors: [],
+      toolCalls: [],
+    } as any);
+
+    // Resume the workflow with the answer
+    const resumeResult = await workflowService.resumeWorkflow(reqId, 'Sí');
+
+    // Expect the final result to be returned successfully
+    expect(resumeResult.response.data.choices[0].message.content).toBe('mock orchestrator final content');
   });
 });
