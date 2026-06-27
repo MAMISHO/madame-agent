@@ -51,6 +51,8 @@ export class OpenCodeStrategy implements HarnessStrategy {
     return {
       response: {
         data: {
+          status: 'pending_user_input',
+          requestId: parentRequestId,
           id: parentRequestId,
           object: 'chat.completion',
           created: Math.floor(Date.now() / 1000),
