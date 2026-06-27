@@ -697,7 +697,7 @@ ${scraped.content}
           } else {
             // No script, try starting Ollama directly
             this.agentLogger.log('System', 'optimize-ollama.sh not found. Attempting direct start...', parentRequestId);
-            await execAsync('OLLAMA_NUM_PARALLEL=2 ollama serve > /dev/null 2>&1 &', { timeout: 5000 }).catch(() => {});
+            await execAsync('nohup OLLAMA_NUM_PARALLEL=2 ollama serve > /dev/null 2>&1 &', { timeout: 5000 }).catch(() => {});
             const readyDirect = await this.isOllamaResponsive(15);
             if (readyDirect) {
               this.agentLogger.log('System', 'Ollama started directly and is responsive.', parentRequestId);
