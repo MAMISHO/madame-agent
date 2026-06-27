@@ -643,9 +643,16 @@ ${scraped.content}
     const providersConfig = this.configService.get('providers') || {};
 
     // Check if any subagent in this pair uses Ollama
-    const usesOllama = pair.subagents.some((key) => {
-      const cfg = providersConfig[key];
-      return cfg && cfg.type === 'ollama';
+    // Subagents can be identified by provider key (e.g. 'local_gemma_oc') 
+    // OR by model name (e.g. 'gemma4:12b-mlx-oc')
+    const usesOllama = pair.subagents.some((subagentId) => {
+      // Direct key lookup
+      const directCfg = providersConfig[subagentId];
+      if (directCfg && directCfg.type === 'ollama') return true;
+      // Model name lookup — find any provider whose model matches
+      return Object.values(providersConfig).some(
+        (cfg: any) => cfg.model === subagentId && cfg.type === 'ollama',
+      );
     });
 
     if (!usesOllama) {
