@@ -13,6 +13,7 @@ import { ChatCompletionRequest } from '../proxy/dto/openai.dto';
 import { ValidatorService } from '../tools/validator.service';
 import { HarnessService } from '../harness/harness.service';
 import { SessionManager } from './session.manager';
+import { ModelResolverService } from './model-resolver.service';
 
 describe('WorkflowService', () => {
   let workflowService: WorkflowService;
@@ -55,6 +56,17 @@ describe('WorkflowService', () => {
       providers: [
         WorkflowService,
         SessionManager,
+        {
+          provide: ModelResolverService,
+          useValue: {
+            resolveModel: jest.fn().mockResolvedValue({
+              config: { model: 'gemma4:12b-mlx-oc', type: 'ollama' },
+              providerKey: 'local_gemma_oc',
+              escalated: false,
+            }),
+            getLocalConfig: jest.fn().mockReturnValue({ type: 'ollama' }),
+          },
+        },
         {
           provide: ConfigService,
           useValue: {

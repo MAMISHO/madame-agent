@@ -13,6 +13,7 @@ import { ValidatorService } from '../tools/validator.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { HarnessService } from '../harness/harness.service';
 import { SessionManager } from './session.manager';
+import { ModelResolverService } from './model-resolver.service';
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -50,6 +51,7 @@ export class WorkflowService {
     private validatorService: ValidatorService,
     private harnessService: HarnessService,
     private sessionManager: SessionManager,
+    private modelResolverService: ModelResolverService,
   ) {}
 
   private isConfirmationMessage(msg: string): boolean {
@@ -338,26 +340,14 @@ ${userMessage}`;
           subagentsToTry = [...pair.subagents];
         }
 
-        const executorModel = subagentsToTry[0] || 'local_medium';
-        const providersConfig = this.configService.get('providers') || {};
-        
-        let executorConfig = providersConfig[executorModel];
-        let executorKey = executorModel;
-        if (!executorConfig) {
-          const matched = Object.entries(providersConfig).find(
-            ([_, cfg]: [string, any]) => cfg.model === executorModel,
-          );
-          if (matched) {
-            executorKey = matched[0];
-            executorConfig = matched[1];
-          }
-        }
-
-        if (!executorConfig) {
-          throw new Error(`Executor model '${executorModel}' not configured.`);
-        }
+        const rawExecutorModel = subagentsToTry[0] || 'local_medium';
+        const resolved = await this.modelResolverService.resolveModel(rawExecutorModel, args.task);
+        const executorConfig = resolved.config;
+        const executorKey = resolved.providerKey;
+        let executorModel = executorConfig.model;
 
         // Get QA model (use the same executorKey to reuse model memory and avoid loading timeouts)
+        const providersConfig = this.configService.get('providers') || {};
         const qaModel = executorKey;
         const qaConfig = providersConfig[qaModel];
 
@@ -719,19 +709,10 @@ ${scraped.content}
     request: ChatCompletionRequest,
     pair: { id: string; name: string; orchestrator: string; subagents: string[] },
   ): Promise<void> {
-    const providersConfig = this.configService.get('providers') || {};
-
     // Check if any subagent in this pair uses Ollama
-    // Subagents can be identified by provider key (e.g. 'local_gemma_oc') 
-    // OR by model name (e.g. 'gemma4:12b-mlx-oc')
     const usesOllama = pair.subagents.some((subagentId) => {
-      // Direct key lookup
-      const directCfg = providersConfig[subagentId];
-      if (directCfg && directCfg.type === 'ollama') return true;
-      // Model name lookup — find any provider whose model matches
-      return Object.values(providersConfig).some(
-        (cfg: any) => cfg.model === subagentId && cfg.type === 'ollama',
-      );
+      const localCfg = this.modelResolverService.getLocalConfig(subagentId);
+      return localCfg && localCfg.type === 'ollama';
     });
 
     if (!usesOllama) {
