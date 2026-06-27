@@ -13,7 +13,7 @@ fi
 # 2. Start Ollama in background with OLLAMA_NUM_PARALLEL=2
 echo "Starting Ollama with OLLAMA_NUM_PARALLEL=2..."
 export OLLAMA_NUM_PARALLEL=2
-ollama serve > /dev/null 2>&1 &
+nohup ollama serve > /dev/null 2>&1 &
 
 # 3. Wait for the server to become responsive
 for i in {1..10}; do
