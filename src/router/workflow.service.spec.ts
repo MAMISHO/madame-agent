@@ -11,6 +11,7 @@ import { SkillScraperService } from '../tools/skill-scraper.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { ChatCompletionRequest } from '../proxy/dto/openai.dto';
 import { ValidatorService } from '../tools/validator.service';
+import { HarnessService } from '../harness/harness.service';
 
 describe('WorkflowService', () => {
   let workflowService: WorkflowService;
@@ -161,6 +162,39 @@ describe('WorkflowService', () => {
             getGlobalCheckCommand: jest.fn().mockReturnValue('echo "check"'),
           },
         },
+        {
+          provide: HarnessService,
+          useValue: {
+            getStrategy: jest.fn().mockReturnValue({
+              name: 'cli',
+              parseRequest: jest.fn().mockImplementation((messages) => ({
+                userMessage: 'test task',
+                isInterventionReply: false,
+              })),
+              formatInterventionResponse: jest.fn().mockImplementation((requestId, question, orchestratorConfig) => ({
+                response: {
+                  data: {
+                    status: 'pending_user_input',
+                    requestId,
+                    question,
+                  },
+                },
+                metadata: {
+                  mode: 'orchestrator',
+                  escalated: false,
+                  providerKey: orchestratorConfig?.provider || 'unknown',
+                  providerType: orchestratorConfig?.type || 'unknown',
+                  model: orchestratorConfig?.model || 'unknown',
+                  originalTokens: 0,
+                  finalTokens: 0,
+                  iterations: 0,
+                  toolCalls: [],
+                  toolErrors: [],
+                },
+              })),
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -189,11 +223,10 @@ describe('WorkflowService', () => {
     // 1. Tool registration called first
     expect(toolRegistryService.register).toHaveBeenCalled();
 
-    // 2. Preparer was called via toolLoop.execute with tool_choice required
+    // 2. Preparer was called via toolLoop.execute
     expect(toolLoopService.execute).toHaveBeenCalledWith(
       expect.objectContaining({
         requestId: expect.stringMatching(/^prep_/),
-        tool_choice: 'required',
         messages: [
           { role: 'system', content: 'mock prompt for preparer' },
           { role: 'user', content: 'Task: test task' },
