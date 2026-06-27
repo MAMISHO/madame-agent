@@ -12,6 +12,7 @@ import { SkillScraperService } from '../tools/skill-scraper.service';
 import { ValidatorService } from '../tools/validator.service';
 import { ObservabilityService } from '../observability/observability.service';
 import { HarnessService } from '../harness/harness.service';
+import { SessionManager } from './session.manager';
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -48,7 +49,18 @@ export class WorkflowService {
     private observability: ObservabilityService,
     private validatorService: ValidatorService,
     private harnessService: HarnessService,
+    private sessionManager: SessionManager,
   ) {}
+
+  private isConfirmationMessage(msg: string): boolean {
+    if (!msg) return false;
+    const clean = msg.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?¿¡!]/g, "");
+    const confirmations = [
+      'si', 'sí', 'yes', 'ok', 'okay', 'procede', 'proceder', 'dale', 'afirmativo',
+      'continuar', 'continua', 'continúa', 'go ahead', 'proceed', 'run', 'ejecutar', 'ejecuta'
+    ];
+    return confirmations.includes(clean) || (clean.length < 10 && confirmations.some(c => clean.includes(c)));
+  }
 
   async executeWorkflow(
     request: ChatCompletionRequest,
@@ -78,10 +90,19 @@ export class WorkflowService {
       throw new Error(`Orchestrator provider "${pair.orchestrator}" not found for pair "${pair.name}"`);
     }
 
+    const sessionId = request.metadata?.sessionId || 'default-session';
+    let session = this.sessionManager.getSession(sessionId);
+
+    if (!session) {
+      session = this.sessionManager.createSession(sessionId, userMessage);
+    }
+
     try {
       this.pendingRequests.set(parentRequestId, { request, pair });
 
-      let preparerText = '';
+      // Identify if we need to run/re-run Preparer or Planner based on session state and user message
+      let preparerText = session.preparerReport || '';
+      let planText = session.currentPlan || '';
 
       // 1. Register Custom Executor/QA delegate_subagent tool
       this.registerCustomDelegationTool(pair, parentRequestId, () => preparerText);
@@ -89,48 +110,71 @@ export class WorkflowService {
       // 1.5. Ollama Lifecycle Check (deterministic, not LLM-dependent)
       await this.ensureOllamaReady(parentRequestId, request, pair);
 
-      // 2. Environment Preparer Agent (Cloud)
-      this.agentLogger.log('Preparer', 'Verifying environment and configuring context...', parentRequestId);
-      const preparerPrompt = this.promptService.loadPrompt('preparer');
-      const preparerRequest: ChatCompletionRequest = {
-        model: pair.orchestrator,
-        messages: [
-          { role: 'system', content: preparerPrompt },
-          { role: 'user', content: `Task: ${userMessage}` },
-        ],
-        tools: this.toolRegistry.getDefinitions().filter(t => t.function.name !== 'delegate_subagent') as any,
-        requestId: `prep_${randomUUID().slice(0, 8)}`,
-        parentRequestId,
-      };
-      const preparerResult = await this.toolLoop.execute(
-        preparerRequest,
-        orchestratorConfig,
-        undefined,
-        {
+      // 2. Environment Preparer Agent (Cloud) - Only run if state is NEW
+      if (session.state === 'NEW') {
+        this.agentLogger.log('Preparer', 'Verifying environment and configuring context...', parentRequestId);
+        const preparerPrompt = this.promptService.loadPrompt('preparer');
+        const preparerRequest: ChatCompletionRequest = {
+          model: pair.orchestrator,
+          messages: [
+            { role: 'system', content: preparerPrompt },
+            { role: 'user', content: `Task: ${userMessage}` },
+          ],
+          tools: this.toolRegistry.getDefinitions().filter(t => t.function.name !== 'delegate_subagent') as any,
+          requestId: `prep_${randomUUID().slice(0, 8)}`,
           parentRequestId,
-          userResponses: this.userResponses,
-        }
-      );
-      preparerText = preparerResult.response.data?.choices?.[0]?.message?.content || 'Environment ready';
-      
-      this.agentLogger.log('Preparer', `Environment Report:\n${preparerText.slice(0, 200)}...`, parentRequestId);
+        };
+        const preparerResult = await this.toolLoop.execute(
+          preparerRequest,
+          orchestratorConfig,
+          undefined,
+          {
+            parentRequestId,
+            userResponses: this.userResponses,
+          }
+        );
+        preparerText = preparerResult.response.data?.choices?.[0]?.message?.content || 'Environment ready';
+        session = this.sessionManager.updateSession(sessionId, {
+          preparerReport: preparerText,
+          state: 'PREPARED',
+        });
+        this.agentLogger.log('Preparer', `Environment Report:\n${preparerText.slice(0, 200)}...`, parentRequestId);
+      } else {
+        this.agentLogger.log('Preparer', 'Skipped environment verification (cached report used).', parentRequestId);
+      }
 
-      // 3. Planner Agent (Cloud)
-      this.agentLogger.log('Planner', 'Generating technical implementation plan...', parentRequestId);
-      const plannerPrompt = this.promptService.loadPrompt('planner');
-      const plannerRequest: ChatCompletionRequest = {
-        model: pair.orchestrator,
-        messages: [
-          { role: 'system', content: plannerPrompt },
-          { role: 'user', content: `Task: ${userMessage}\n\nEnvironment Report:\n${preparerText}` },
-        ],
-        requestId: `plan_${randomUUID().slice(0, 8)}`,
-        parentRequestId,
-      };
-      const plannerResponse = await this.providersService.getProvider(orchestratorConfig.type).chat(plannerRequest, orchestratorConfig);
-      const planText = plannerResponse.data?.choices?.[0]?.message?.content || 'No plan generated';
-      
-      this.agentLogger.log('Planner', `Plan generated:\n${planText.slice(0, 300)}...`, parentRequestId);
+      // Check if we need to re-run the Planner (Feedback case)
+      const isFeedback = session.state !== 'NEW' && session.state !== 'PREPARED' && !this.isConfirmationMessage(userMessage);
+
+      // 3. Planner Agent (Cloud) - Run on PREPARED or if user sends Feedback
+      if (session.state === 'PREPARED' || isFeedback) {
+        this.agentLogger.log('Planner', isFeedback ? 'Re-evaluating plan based on feedback...' : 'Generating technical implementation plan...', parentRequestId);
+        const plannerPrompt = this.promptService.loadPrompt('planner');
+        const plannerUserContent = isFeedback
+          ? `Original Task: ${session.originalTask}\n\nEnvironment Report:\n${preparerText}\n\nPrevious Plan:\n${planText}\n\nNew User Feedback:\n${userMessage}`
+          : `Task: ${session.originalTask}\n\nEnvironment Report:\n${preparerText}`;
+
+        const plannerRequest: ChatCompletionRequest = {
+          model: pair.orchestrator,
+          messages: [
+            { role: 'system', content: plannerPrompt },
+            { role: 'user', content: plannerUserContent },
+          ],
+          requestId: `plan_${randomUUID().slice(0, 8)}`,
+          parentRequestId,
+        };
+        const plannerResponse = await this.providersService.getProvider(orchestratorConfig.type).chat(plannerRequest, orchestratorConfig);
+        planText = plannerResponse.data?.choices?.[0]?.message?.content || 'No plan generated';
+        
+        session = this.sessionManager.updateSession(sessionId, {
+          currentPlan: planText,
+          state: 'PLANNED',
+        });
+        
+        this.agentLogger.log('Planner', `Plan updated:\n${planText.slice(0, 300)}...`, parentRequestId);
+      } else {
+        this.agentLogger.log('Planner', 'Skipped plan generation (cached plan used).', parentRequestId);
+      }
 
       // 4. Orchestrator Agent (Cloud) - Main Outer Loop
       this.agentLogger.log('Orchestrator', 'Orchestration loop started.', parentRequestId);
@@ -138,13 +182,24 @@ export class WorkflowService {
       // System instructions for outer Orchestrator
       const orchestratorPrompt = this.promptService.loadPrompt('orchestrator-delegate');
       
-      // Inject the plan and preparer report directly into the user message context
+      // Construct token-optimized compacted user message
+      const userPromptContent = `Original Task: ${session.originalTask}
+
+Environment Status:
+${preparerText || 'Not prepared'}
+
+Implementation Plan:
+${planText || 'No plan proposed'}
+
+Previous Execution Steps:
+${session.executionSummary || 'No execution history yet'}
+
+Latest User Input/Feedback:
+${userMessage}`;
+
       const enrichedMessages: Message[] = [
         { role: 'system', content: orchestratorPrompt },
-        { 
-          role: 'user', 
-          content: `Original Task: ${userMessage}\n\nImplementation Plan:\n${planText}\n\nEnvironment Status:\n${preparerText}` 
-        },
+        { role: 'user', content: userPromptContent },
       ];
 
       const searchSkills = this.toolRegistry.getDefinitions().find(t => t.function.name === 'search_skills');
@@ -168,6 +223,22 @@ export class WorkflowService {
         const endMs = Date.now() - startMs;
 
         this.agentLogger.log('System', `Workflow completed in ${endMs}ms`, parentRequestId);
+
+        // Update Session executionSummary
+        const toolsSummary = result.toolCalls.map(tc => {
+          if (tc.name === 'delegate_subagent') {
+            return `- Delegated to subagent: "${tc.args?.task}"`;
+          }
+          return `- Called tool: "${tc.name}"`;
+        }).join('\n');
+        
+        const finalContent = result.response.data?.choices?.[0]?.message?.content || 'No response content';
+        const newSummary = `\n[Turn completed in ${endMs}ms]\nTools Executed:\n${toolsSummary || 'None'}\nOutcome: ${finalContent.slice(0, 200)}...`;
+        
+        this.sessionManager.updateSession(sessionId, {
+          state: 'COMPLETED',
+          executionSummary: (session.executionSummary || '') + newSummary,
+        });
 
         return {
           response: result.response,
@@ -217,6 +288,14 @@ export class WorkflowService {
     } catch (err: any) {
       if (err instanceof UserInteractionRequiredError || err.name === 'UserInteractionRequiredError') {
         this.agentLogger.log('System', `Workflow paused for user interaction: "${err.question}"`, parentRequestId);
+        
+        // Update Session state and summary
+        const newSummary = `\n[Workflow Paused] Asked: "${err.question}"`;
+        this.sessionManager.updateSession(sessionId, {
+          state: 'EXECUTING',
+          executionSummary: (session.executionSummary || '') + newSummary,
+        });
+
         const harnessName = request.metadata?.harness;
         const strategy = this.harnessService.getStrategy(harnessName);
         return strategy.formatInterventionResponse(parentRequestId, err.question, orchestratorConfig);

@@ -54,4 +54,5 @@ export class ChatCompletionRequest {
   maxIterations?: number;
   timeoutMs?: number;
   metadata?: Record<string, any>;
+  user?: string;
 }
