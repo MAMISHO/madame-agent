@@ -4,6 +4,7 @@ import { resolve, relative, sep } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { ToolRegistryService, ToolHandler } from './tool-registry.service';
+import { UserInteractionRequiredError } from './tool-loop.service';
 
 const execAsync = promisify(exec);
 
@@ -29,7 +30,8 @@ export class BuiltInToolsService {
     this.registerExecuteCommand();
     this.registerCreateDirectory();
     this.registerDeleteFile();
-    this.logger.log('9 built-in tools registered');
+    this.registerAskUser();
+    this.logger.log('10 built-in tools registered');
   }
 
   private registerReadFile(): void {
@@ -339,6 +341,37 @@ export class BuiltInToolsService {
         return { path: args.path, status: 'deleted' };
       },
       timeout: 10_000,
+    });
+  }
+
+  private registerAskUser(): void {
+    this.register({
+      definition: {
+        type: 'function',
+        function: {
+          name: 'ask_user',
+          description: 'Ask the user a question to request permission or feedback before performing critical actions.',
+          parameters: {
+            type: 'object',
+            properties: {
+              question: { type: 'string', description: 'The question to ask the user' },
+            },
+            required: ['question'],
+          },
+        },
+      },
+      execute: async (args: { question: string }, context?: any) => {
+        const parentRequestId = context?.executionOptions?.parentRequestId || context?.parentRequestId;
+        const userResponses = context?.executionOptions?.userResponses;
+        if (userResponses && parentRequestId) {
+          if (userResponses.has(parentRequestId)) {
+            const answer = userResponses.get(parentRequestId);
+            return { response: answer };
+          }
+        }
+        throw new UserInteractionRequiredError(args.question, parentRequestId || 'unknown');
+      },
+      timeout: 300_000,
     });
   }
 }

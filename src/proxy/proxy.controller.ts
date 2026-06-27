@@ -232,4 +232,25 @@ export class ProxyController {
       req.off('close', abortHandler);
     }
   }
+
+  @Post('chat/completions/resume')
+  async resumeWorkflow(
+    @Body() body: { requestId: string; response: string },
+    @Res() res: Response,
+  ) {
+    try {
+      this.logger.log(`Resuming workflow for request ${body.requestId} with response: ${body.response}`);
+      const { response } =
+        await this.proxyService.resumeWorkflow(body.requestId, body.response);
+      res.json(response.data);
+    } catch (error: any) {
+      this.logger.error(`Resuming request ${body.requestId} failed: ${error.message}`, error.stack);
+      res.status(500).json({
+        error: {
+          message: error.message || 'Internal Server Error',
+          type: 'proxy_error',
+        },
+      });
+    }
+  }
 }

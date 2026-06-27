@@ -786,4 +786,8 @@ export class RouterService implements OnModuleInit {
     if (modelConfig.type === 'cloud') return 32768;
     return undefined;
   }
+
+  async resume(requestId: string, answer: string): Promise<RouteResult> {
+    return this.workflowService.resumeWorkflow(requestId, answer);
+  }
 }

@@ -23,6 +23,13 @@ export class FatalToolError extends Error {
   }
 }
 
+export class UserInteractionRequiredError extends Error {
+  constructor(public readonly question: string, public readonly requestId: string) {
+    super(question);
+    this.name = 'UserInteractionRequiredError';
+  }
+}
+
 const MAX_CACHE_ENTRIES = 100;
 
 @Injectable()

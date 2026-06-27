@@ -11,4 +11,8 @@ export class ProxyService {
   ): Promise<RouteResult> {
     return this.routerService.route(request);
   }
+
+  async resumeWorkflow(requestId: string, answer: string): Promise<RouteResult> {
+    return this.routerService.resume(requestId, answer);
+  }
 }
