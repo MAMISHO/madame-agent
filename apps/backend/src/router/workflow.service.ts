@@ -115,7 +115,7 @@ export class WorkflowService {
       // 2. Environment Preparer Agent (Cloud) - Only run if state is NEW
       if (session.state === 'NEW') {
         this.agentLogger.log('Preparer', 'Verifying environment and configuring context...', parentRequestId);
-        const preparerPrompt = this.promptService.loadPrompt('preparer');
+        const preparerPrompt = await this.promptService.loadPrompt('preparer');
         const preparerRequest: ChatCompletionRequest = {
           model: pair.orchestrator,
           metadata: request.metadata,
@@ -152,7 +152,7 @@ export class WorkflowService {
       // 3. Planner Agent (Cloud) - Run on PREPARED or if user sends Feedback
       if (session.state === 'PREPARED' || isFeedback) {
         this.agentLogger.log('Planner', isFeedback ? 'Re-evaluating plan based on feedback...' : 'Generating technical implementation plan...', parentRequestId);
-        const plannerPrompt = this.promptService.loadPrompt('planner');
+        const plannerPrompt = await this.promptService.loadPrompt('planner');
         const plannerUserContent = isFeedback
           ? `Original Task: ${session.originalTask}\n\nEnvironment Report:\n${preparerText}\n\nPrevious Plan:\n${planText}\n\nNew User Feedback:\n${userMessage}`
           : `Task: ${session.originalTask}\n\nEnvironment Report:\n${preparerText}`;
@@ -184,7 +184,7 @@ export class WorkflowService {
       this.agentLogger.log('Orchestrator', 'Orchestration loop started.', parentRequestId);
       
       // System instructions for outer Orchestrator
-      const orchestratorPrompt = this.promptService.loadPrompt('orchestrator-delegate');
+      const orchestratorPrompt = await this.promptService.loadPrompt('orchestrator-delegate');
       
       // Construct token-optimized compacted user message
       const userPromptContent = `Original Task: ${session.originalTask}
@@ -373,8 +373,8 @@ ${userMessage}`;
             this.agentLogger.log('Executor', `Iteration ${iteration}/${maxSubIterations} starting...`, subagentRequestId);
 
             // 1. Build Executor Prompt
-            const basePrompt = this.promptService.loadPrompt('subagent-base');
-            let executorSystemContent = basePrompt + '\n\n' + this.promptService.loadPrompt('executor');
+            const basePrompt = await this.promptService.loadPrompt('subagent-base');
+            let executorSystemContent = basePrompt + '\n\n' + (await this.promptService.loadPrompt('executor'));
             if (supervisorOverride) {
               executorSystemContent += `\n\n=== CRITICAL SUPERVISOR OVERRIDE ===\nThe Transversal Supervisor has issued a mandatory override instruction. You MUST obey this override immediately and prioritize it over other rules.\nOverride Instruction: ${supervisorOverride}\n\n`;
             }
@@ -501,7 +501,7 @@ ${userMessage}`;
               }
             }
 
-            const qaSystemPrompt = basePrompt + '\n\n' + this.promptService.loadPrompt('qa');
+            const qaSystemPrompt = basePrompt + '\n\n' + (await this.promptService.loadPrompt('qa'));
             const qaRequest: ChatCompletionRequest = {
               model: qaModel,
               metadata,
@@ -558,7 +558,7 @@ ${userMessage}`;
 
             // 3. Transversal Supervisor Agent (Cloud) - Parallel loop detection & override injection
             this.agentLogger.log('Supervisor', 'Evaluating telemetry for loops and desyncs...', subagentRequestId);
-            const supervisorSystemPrompt = this.promptService.loadPrompt('supervisor');
+            const supervisorSystemPrompt = await this.promptService.loadPrompt('supervisor');
             
             const supervisorRequest: ChatCompletionRequest = {
               model: pair.orchestrator, // Cloud model

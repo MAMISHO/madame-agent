@@ -26,7 +26,7 @@ export class TranslationService {
   }
 
   async detectLanguage(text: string): Promise<string> {
-    const prompt = this.promptService.loadPrompt('detect-language', {
+    const prompt = await this.promptService.loadPrompt('detect-language', {
       text: text.slice(0, 500),
     });
 
@@ -46,7 +46,7 @@ export class TranslationService {
 
     this.logger.debug(`Translating from ${sourceLang} → ${targetLang}: "${text.slice(0, 60)}..."`);
 
-    const prompt = this.promptService.loadPrompt('translate-text', {
+    const prompt = await this.promptService.loadPrompt('translate-text', {
       sourceLang,
       targetLang,
       text: text.slice(0, 2000),

@@ -115,7 +115,7 @@ export class RouterService implements OnModuleInit {
 
           const startTime = Date.now();
           try {
-            let systemContent = this.promptService.loadPrompt('subagent-system');
+            let systemContent = await this.promptService.loadPrompt('subagent-system');
             if (args.skills && args.skills.length > 0) {
               systemContent += '\n\n=== RELEVANT SKILLS / KNOWLEDGE ===\n';
               for (const skillName of args.skills) {
@@ -217,7 +217,7 @@ export class RouterService implements OnModuleInit {
               messages: [
                 {
                   role: 'system',
-                  content: this.promptService.loadPrompt('self-fallback-system')
+                  content: await this.promptService.loadPrompt('self-fallback-system')
                 },
                 {
                   role: 'user',
