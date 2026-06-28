@@ -220,7 +220,7 @@ export class ProxyController {
           res.write(chunk);
           
           try {
-            const str = chunk.toString('utf8');
+            const str = (chunk as any).toString('utf8');
             const lines = str.split('\n');
             for (const line of lines) {
               const trimmed = line.trim();

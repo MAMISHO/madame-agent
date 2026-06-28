@@ -1,0 +1,101 @@
+<div class="mochi-layout">
+  <!-- Sidebar Panel -->
+  <aside class="mochi-sidebar">
+    <div class="mochi-brand">
+      <div class="mochi-logo">M</div>
+      <h2>Madame-Agent</h2>
+    </div>
+    
+    <nav class="mochi-nav">
+      <a href="#" class="active">
+        <span class="icon">📊</span>
+        <span>Madame-Stats</span>
+      </a>
+      <a href="#">
+        <span class="icon">🕸️</span>
+        <span>Madame-Harness</span>
+      </a>
+      <a href="#">
+        <span class="icon">⚙️</span>
+        <span>Config</span>
+      </a>
+    </nav>
+
+    <div class="mochi-footer">
+      <p>v1.0.0 (Sequelize + SQLite)</p>
+    </div>
+  </aside>
+
+  <!-- Main Panel -->
+  <main class="mochi-main">
+    <header class="mochi-header">
+      <div class="header-title">
+        <h1>Dashboard</h1>
+        <p>Real-time orchestrator statistics and costs</p>
+      </div>
+      <div class="connection-status" [class.connected]="stats()">
+        <span class="dot"></span>
+        <span>{{ stats() ? 'Connected to Port 3001' : 'Disconnected' }}</span>
+      </div>
+    </header>
+
+    <div class="mochi-content">
+      <!-- Loading State -->
+      @if (loading()) {
+        <div class="state-card loading-state">
+          <div class="spinner"></div>
+          <p>Connecting to database & fetching costs...</p>
+        </div>
+      }
+
+      <!-- Error State -->
+      @if (error()) {
+        <div class="state-card error-state">
+          <span class="error-icon">⚠️</span>
+          <h3>Connection Failed</h3>
+          <p>{{ error() }}</p>
+          <button (click)="loadStats()" class="retry-btn">Retry Connection</button>
+        </div>
+      }
+
+      <!-- Cost Stats Cards -->
+      @if (stats(); as s) {
+        <div class="stats-grid">
+          <!-- Cloud Cost Card -->
+          <div class="stats-card cloud-card">
+            <div class="card-header">
+              <span class="card-title">Cloud Spend</span>
+              <span class="card-icon">☁️</span>
+            </div>
+            <div class="card-value">${{ s.totalCloudUsd.toFixed(4) }}</div>
+            <div class="card-sub">
+              <span>Input: {{ s.cloudInputTokens.toLocaleString() }} tkn</span>
+              <span class="separator">•</span>
+              <span>Output: {{ s.cloudOutputTokens.toLocaleString() }} tkn</span>
+            </div>
+          </div>
+
+          <!-- Local Savings Card -->
+          <div class="stats-card savings-card">
+            <div class="card-header">
+              <span class="card-title">Estimated Savings</span>
+              <span class="card-icon">💰</span>
+            </div>
+            <div class="card-value">${{ s.totalSavedUsd.toFixed(4) }}</div>
+            <div class="card-sub">
+              <span>Input: {{ s.localInputTokens.toLocaleString() }} tkn</span>
+              <span class="separator">•</span>
+              <span>Output: {{ s.localOutputTokens.toLocaleString() }} tkn</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Details Section -->
+        <div class="mochi-panel-section">
+          <h3>System Harness Integration</h3>
+          <p>The system is connected to your local SQLite database. Active configurations, custom prompts, and run logs are stored in <code>madame-agent.sqlite</code>.</p>
+        </div>
+      }
+    </div>
+  </main>
+</div>

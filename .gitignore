@@ -39,3 +39,9 @@ pids/
 
 # Testing
 test/coverage/
+
+
+.nx/cache
+.nx/workspace-data
+.nx/migrate-runs
+vitest.config.*.timestamp*
