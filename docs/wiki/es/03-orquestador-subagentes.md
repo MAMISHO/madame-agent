@@ -8,7 +8,9 @@ Este documento detalla el diseño técnico, la arquitectura y el funcionamiento 
 
 El objetivo principal es optimizar el uso de tokens y el espacio de la ventana de contexto en el modelo principal (orquestador). 
 
-Cuando una tarea compleja requiere el uso de herramientas o múltiples iteraciones (por ejemplo, analizar el sistema de archivos, realizar modificaciones y pruebas), el orquestador principal delega esta tarea a un subagente local. El subagente ejecuta su propio bucle de herramientas en un contexto de memoria completamente separado y aislado. Una vez resuelta la subtarea, el subagente devuelve **únicamente el resultado final** al orquestador principal. Toda la historia intermedia y salidas de las herramientas del subagente son descartadas, manteniendo limpia la ventana de contexto del orquestador.
+Cuando una tarea compleja requiere el uso de herramientas o múltiples iteraciones (por ejemplo, analizar el sistema de archivos, realizar modificaciones y pruebas), el orquestador principal delega esta tarea a un subagente local o híbrido. El subagente ejecuta su propio bucle de herramientas en un contexto de memoria completamente separado y aislado. Una vez resuelta la subtarea, el subagente devuelve **únicamente el resultado final** al orquestador principal. 
+
+Además, **el historial de ejecución dentro de una sesión es compactado** (`executionSummary`) por el `WorkflowService`, lo que significa que el orquestador no recibe los chats crudos del historial, sino un resumen de las herramientas usadas y los resultados. Toda la historia intermedia y salidas de las herramientas del subagente son descartadas o compactadas, manteniendo extremadamente limpia la ventana de contexto del orquestador.
 
 ---
 
@@ -21,11 +23,20 @@ Cuando una tarea compleja requiere el uso de herramientas o múltiples iteracion
   │  Mensaje del Cliente                                   │
   │    │                                                   │
   │    ▼                                                   │
-  │  [RouterService] ──► Determina par orquestador          │
-  │    │                                                   │
-  │    ├─ Inyecta tool: `delegate_subagent`                │
+  │  [RouterService] ──► Extrae mensajes e invoca WorkflowService   │
   │    │                                                   │
   │    ▼                                                   │
+  │  [WorkflowService] ──► Mantiene sesión y compacta historial (`executionSummary`)
+  │    │                                                   │
+  │    ├─ (Prepara prompt y herramientas)                  │
+  │    │                                                   │
+  │    ▼                                                   │
+  │  [ModelResolverService] ──► Determina orquestador y pares híbridos
+  │    │                                                   │
+  │    ▼                                                   │
+  │  [ToolLoopService] (Orquestador Cloud)                 │
+  │    │                                                   │
+  │    └─ Si decide delegar ──► Llama a `delegate_subagent`│
   │  [ToolLoopService] (Orquestador Cloud)                 │
   │    │                                                   │
   │    └─ Si decide delegar ──► Llama a `delegate_subagent`│
@@ -33,9 +44,12 @@ Cuando una tarea compleja requiere el uso de herramientas o múltiples iteracion
        │
        ▼ Ejecución Aislada y Recursiva
   ┌────────────────────────────────────────────────────────┐
-  │ Madame-Agent (Subagente Local)                         │
+  │ Madame-Agent (Subagente Local/Híbrido)                 │
   │                                                        │
-  │  [RouterService.route()] (Llamada recursiva)           │
+  │  [WorkflowService] (Delega al subagente)               │
+  │    │                                                   │
+  │    ▼                                                   │
+  │  [ModelResolverService] ──► Determina si el subagente escala a Cloud
   │    │                                                   │
   │    ▼                                                   │
   │  [ToolLoopService] (Subagente)                         │
