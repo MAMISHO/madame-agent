@@ -116,6 +116,7 @@ export class ToolLoopService {
         const requestTokens = Math.ceil(JSON.stringify(chatReq.messages).length / 3.5);
         this.observability.trackRequest({
           requestId: request.requestId || `tool_loop_${Date.now()}`,
+          sessionId: request.metadata?.sessionId,
           timestamp: new Date(),
           latencyMs: callLatencyMs,
           routing: {

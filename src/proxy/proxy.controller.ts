@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Req, Res, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Query, Body, Req, Res, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ProxyService } from './proxy.service';
 import { ChatCompletionRequest } from './dto/openai.dto';
@@ -120,8 +120,8 @@ export class ProxyController {
   }
 
   @Get('costs')
-  getCosts() {
-    return this.costTracker.getSessionStats();
+  getCosts(@Query('sessionId') sessionId?: string) {
+    return this.costTracker.getSessionStats(sessionId);
   }
 
   @Post('chat/completions')
@@ -184,40 +184,61 @@ export class ProxyController {
 
       const latencyMs = this.observability.finishTimer(requestId);
 
-      // For orchestrator mode, ToolLoopService already tracks each LLM iteration individually.
-      // We skip tracking here to avoid double-counting the final tokens.
-      if (metadata.mode !== 'orchestrator') {
-        this.observability.trackRequest({
-          requestId,
-          timestamp: new Date(),
-          latencyMs,
-          routing: {
+      const trackSuccess = (outTokens: number) => {
+        if (metadata.mode !== 'orchestrator') {
+          this.observability.trackRequest({
             requestId,
-            mode: metadata.mode,
-            classifierMode: metadata.classifierMode,
-            confidence: metadata.confidence,
-            escalated: metadata.escalated,
-            providerKey: metadata.providerKey,
-            providerType: metadata.providerType,
-            model: metadata.model,
-          },
-          originalTokens: metadata.originalTokens,
-          finalTokens: metadata.finalTokens,
-          dedupRemoved: metadata.originalTokens - metadata.finalTokens,
-          success: true,
-          outputTokens: response.data?.usage?.completion_tokens || 0,
-        });
-      }
+            sessionId,
+            timestamp: new Date(),
+            latencyMs,
+            routing: {
+              requestId,
+              mode: metadata.mode,
+              classifierMode: metadata.classifierMode,
+              confidence: metadata.confidence,
+              escalated: metadata.escalated,
+              providerKey: metadata.providerKey,
+              providerType: metadata.providerType,
+              model: metadata.model,
+            },
+            originalTokens: metadata.originalTokens,
+            finalTokens: metadata.finalTokens,
+            dedupRemoved: metadata.originalTokens - metadata.finalTokens,
+            success: true,
+            outputTokens: outTokens,
+          });
+        }
+      };
 
       if (body.stream && response.stream) {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
 
+        let completionText = '';
         for await (const chunk of response.stream) {
           res.write(chunk);
+          
+          try {
+            const str = chunk.toString('utf8');
+            const lines = str.split('\n');
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
+                const parsed = JSON.parse(trimmed.slice(6));
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) {
+                  completionText += content;
+                }
+              }
+            }
+          } catch {
+            // Ignore parse errors for incomplete chunks
+          }
         }
         res.end();
+
+        trackSuccess(Math.ceil(completionText.length / 3.5) || 1);
       } else if (body.stream && !response.stream && response.data) {
         // Client requested streaming but the response is non-streamed (e.g., intervention/error).
         // Convert the chat.completion response into SSE format so streaming clients (OpenCode) display it.
@@ -262,7 +283,10 @@ export class ProxyController {
 
         res.write('data: [DONE]\n\n');
         res.end();
+
+        trackSuccess(response.data?.usage?.completion_tokens || Math.ceil(content.length / 3.5) || 1);
       } else {
+        trackSuccess(response.data?.usage?.completion_tokens || 0);
         res.json(response.data);
       }
     } catch (error: any) {
@@ -283,6 +307,7 @@ export class ProxyController {
 
       this.observability.trackRequest({
         requestId,
+        sessionId,
         timestamp: new Date(),
         latencyMs: 0,
         routing,

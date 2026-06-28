@@ -107,7 +107,7 @@ export class WorkflowService {
       let planText = session.currentPlan || '';
 
       // 1. Register Custom Executor/QA delegate_subagent tool
-      this.registerCustomDelegationTool(pair, parentRequestId, () => preparerText);
+      this.registerCustomDelegationTool(request.metadata, pair, parentRequestId, () => preparerText);
 
       // 1.5. Ollama Lifecycle Check (deterministic, not LLM-dependent)
       await this.ensureOllamaReady(parentRequestId, request, pair);
@@ -118,6 +118,7 @@ export class WorkflowService {
         const preparerPrompt = this.promptService.loadPrompt('preparer');
         const preparerRequest: ChatCompletionRequest = {
           model: pair.orchestrator,
+          metadata: request.metadata,
           messages: [
             { role: 'system', content: preparerPrompt },
             { role: 'user', content: `Task: ${userMessage}` },
@@ -158,6 +159,7 @@ export class WorkflowService {
 
         const plannerRequest: ChatCompletionRequest = {
           model: pair.orchestrator,
+          metadata: request.metadata,
           messages: [
             { role: 'system', content: plannerPrompt },
             { role: 'user', content: plannerUserContent },
@@ -208,6 +210,7 @@ ${userMessage}`;
       
       const orchestratorRequest: ChatCompletionRequest = {
         model: pair.orchestrator,
+        metadata: request.metadata,
         messages: enrichedMessages,
         tools: [
           this.getDelegationToolDefinition(pair.subagents),
@@ -317,6 +320,7 @@ ${userMessage}`;
   }
 
   private registerCustomDelegationTool(
+    metadata: any,
     pair: { id: string; name: string; orchestrator: string; subagents: string[] },
     parentRequestId: string,
     getPreparerText: () => string
@@ -396,6 +400,7 @@ ${userMessage}`;
 
             const executorRequest: ChatCompletionRequest = {
               model: executorModel,
+              metadata,
               messages: [
                 { role: 'system', content: executorSystemContent },
                 { role: 'user', content: executorInput },
@@ -499,6 +504,7 @@ ${userMessage}`;
             const qaSystemPrompt = basePrompt + '\n\n' + this.promptService.loadPrompt('qa');
             const qaRequest: ChatCompletionRequest = {
               model: qaModel,
+              metadata,
               messages: [
                 { role: 'system', content: qaSystemPrompt },
                 { 
@@ -556,6 +562,7 @@ ${userMessage}`;
             
             const supervisorRequest: ChatCompletionRequest = {
               model: pair.orchestrator, // Cloud model
+              metadata,
               messages: [
                 { role: 'system', content: supervisorSystemPrompt },
                 { 
