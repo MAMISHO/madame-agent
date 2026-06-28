@@ -25,6 +25,7 @@ export interface ActiveSubagentTask {
 
 export interface RequestMetrics {
   requestId: string;
+  sessionId?: string;
   timestamp: Date;
   latencyMs: number;
   routing: RoutingInfo;
@@ -111,6 +112,7 @@ export class ObservabilityService {
       const isLocal = metrics.routing.providerType === 'ollama';
       const costEntry = this.costTracker.trackCost({
         requestId: metrics.requestId,
+        sessionId: metrics.sessionId,
         mode: metrics.routing.mode,
         provider: isLocal ? 'ollama' : metrics.routing.providerKey,
         model: metrics.routing.model,

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Solar 3D - Three.js</title>
+    <style>
+        body { margin: 0; background-color: #000; color: white; font-family: sans-serif; overflow: hidden; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
+        .btn { pointer-events: auto; background: #333; color: white; border: none; padding: 10px; cursor: pointer; margin-bottom: 5px; }
+        #info { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; display: none; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <button class="btn" onclick="toggleAnimation()">Pausar/Reanudar Órbitas</button>
+</div>
+<div id="info">
+    <h2 id="planet-name"></h2>
+    <p id="planet-desc"></p>
+    <button class="btn" onclick="document.getElementById('info').style.display='none'">Cerrar</button>
+</div>
+
+<script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
+    import { OrbitControls } from 'https://cdn.skypack.dev/three@0.132.2/examples/jsm/controls/OrbitControls.js';
+
+    let scene, camera, renderer, controls;
+    let planets = [];
+    let isPaused = false;
+
+    const planetData = [
+        { name: "Mercurio", color: 0xaaaaaa, size: 0.5, dist: 10, speed: 0.04 },
+        { name: "Venus", color: 0xe3bb76, size: 0.8, dist: 15, speed: 0.015 },
+        { name: "Tierra", color: 0x2233ff, size: 0.8, dist: 20, speed: 0.01 },
+        { name: "Marte", color: 0xff4422, size: 0.6, dist: 25, speed: 0.008 },
+        { name: "Júpiter", color: 0xd39c7e, size: 2.0, dist: 35, speed: 0.004 },
+        { name: "Saturno", color: 0xc5ab6e, size: 1.7, dist: 45, speed: 0.002 },
+        { name: "Urano", color: 0xb5e3e3, size: 1.2, dist: 55, speed: 0.001 },
+        { name: "Neptuno", color: 0x6081ff, size: 1.2, dist: 65, speed: 0.0008 }
+    ];
+
+    function init() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 20, 60);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+
+        // Sol
+        const sunGeo = new THREE.SphereGeometry(4, 32, 32);
+        const sunMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+        const sun = new THREE.Mesh(sunGeo, sunMat);
+        scene.add(sun);
+
+        // Planetas
+        planetData.forEach(data => {
+            const orbitGroup = new THREE.Group();
+            const planetGeo = new THREE.SphereGeometry(data.size, 32, 32);
+            const planetMat = new THREE.MeshLambertMaterial({ color: data.color });
+            const mesh = new THREE.Mesh(planetGeo, planetMat);
+            mesh.position.x = data.dist;
+            mesh.userData = data;
+            
+            orbitGroup.add(mesh);
+            scene.add(orbitGroup);
+            planets.push({ group: orbitGroup, speed: data.speed, mesh: mesh });
+        });
+
+        // Luces
+        const light = new THREE.PointLight(0xffffff, 2, 100);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x333333));
+
+        // Estrellas
+        const starGeo = new THREE.BufferGeometry();
+        const starMat = new THREE.PointsMaterial({ color: 0xffffff });
+        const starCoords = [];
+        for(let i=0; i<5000; i++) {
+            starCoords.push((Math.random()-0.5)*1000, (Math.random()-0.5)*1000, (Math.random()-0.5)*1000);
+        }
+        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
+        scene.add(new THREE.Points(starGeo, starMat));
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if (!isPaused) {
+            planets.forEach(p => p.group.rotation.y += p.speed);
+        }
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
+    window.toggleAnimation = () => isPaused = !isPaused;
+
+    init();
+</script>
+</body>
+</html>

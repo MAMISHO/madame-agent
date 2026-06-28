@@ -5,6 +5,7 @@ import * as path from 'path';
 export interface CostEntry {
   timestamp: string;
   requestId: string;
+  sessionId?: string;
   mode: string;
   provider: string;
   model: string;
@@ -38,6 +39,17 @@ export class CostTrackerService implements OnModuleInit, OnModuleDestroy {
     localInputTokens: 0,
     localOutputTokens: 0,
   };
+  private sessionStatsMap = new Map<
+    string,
+    {
+      totalCloudUsd: number;
+      totalSavedUsd: number;
+      cloudInputTokens: number;
+      cloudOutputTokens: number;
+      localInputTokens: number;
+      localOutputTokens: number;
+    }
+  >();
 
   onModuleInit() {
     this.logFilePath = path.join(process.cwd(), '.madame-agent-costs.jsonl');
@@ -54,7 +66,25 @@ export class CostTrackerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  public trackCost(data: Omit<CostEntry, 'timestamp' | 'costUsd' | 'savedCostUsd'>): CostEntry {
+  private getOrCreateSessionStats(sessionId: string) {
+    let stats = this.sessionStatsMap.get(sessionId);
+    if (!stats) {
+      stats = {
+        totalCloudUsd: 0,
+        totalSavedUsd: 0,
+        cloudInputTokens: 0,
+        cloudOutputTokens: 0,
+        localInputTokens: 0,
+        localOutputTokens: 0,
+      };
+      this.sessionStatsMap.set(sessionId, stats);
+    }
+    return stats;
+  }
+
+  public trackCost(
+    data: Omit<CostEntry, 'timestamp' | 'costUsd' | 'savedCostUsd'>,
+  ): CostEntry {
     const isLocal = data.isLocal || data.provider === 'ollama';
     let costUsd = 0;
     let savedCostUsd = 0;
@@ -63,17 +93,35 @@ export class CostTrackerService implements OnModuleInit, OnModuleDestroy {
 
     if (!isLocal) {
       const rate = rates || RATES_PER_1M['default_cloud'];
-      costUsd = (data.inputTokens / 1_000_000) * rate.in + (data.outputTokens / 1_000_000) * rate.out;
+      costUsd =
+        (data.inputTokens / 1_000_000) * rate.in +
+        (data.outputTokens / 1_000_000) * rate.out;
       this.sessionStats.totalCloudUsd += costUsd;
       this.sessionStats.cloudInputTokens += data.inputTokens;
       this.sessionStats.cloudOutputTokens += data.outputTokens;
+
+      if (data.sessionId) {
+        const sStats = this.getOrCreateSessionStats(data.sessionId);
+        sStats.totalCloudUsd += costUsd;
+        sStats.cloudInputTokens += data.inputTokens;
+        sStats.cloudOutputTokens += data.outputTokens;
+      }
     } else {
       // It's local, calculate savings based on default cloud or parent
       const rate = RATES_PER_1M['default_cloud'];
-      savedCostUsd = (data.inputTokens / 1_000_000) * rate.in + (data.outputTokens / 1_000_000) * rate.out;
+      savedCostUsd =
+        (data.inputTokens / 1_000_000) * rate.in +
+        (data.outputTokens / 1_000_000) * rate.out;
       this.sessionStats.totalSavedUsd += savedCostUsd;
       this.sessionStats.localInputTokens += data.inputTokens;
       this.sessionStats.localOutputTokens += data.outputTokens;
+
+      if (data.sessionId) {
+        const sStats = this.getOrCreateSessionStats(data.sessionId);
+        sStats.totalSavedUsd += savedCostUsd;
+        sStats.localInputTokens += data.inputTokens;
+        sStats.localOutputTokens += data.outputTokens;
+      }
     }
 
     const entry: CostEntry = {
@@ -90,7 +138,10 @@ export class CostTrackerService implements OnModuleInit, OnModuleDestroy {
     return entry;
   }
 
-  public getSessionStats() {
+  public getSessionStats(sessionId?: string) {
+    if (sessionId) {
+      return this.getOrCreateSessionStats(sessionId);
+    }
     return this.sessionStats;
   }
 }

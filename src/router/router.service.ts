@@ -295,6 +295,7 @@ export class RouterService implements OnModuleInit {
       if (isSubagent) {
         this.observability.trackRequest({
           requestId: request.requestId || '',
+          sessionId: request.metadata?.sessionId,
           timestamp: new Date(),
           latencyMs,
           routing: {
@@ -322,6 +323,7 @@ export class RouterService implements OnModuleInit {
         const latencyMs = Date.now() - startTime;
         this.observability.trackRequest({
           requestId: request.requestId || '',
+          sessionId: request.metadata?.sessionId,
           timestamp: new Date(),
           latencyMs,
           routing: {
