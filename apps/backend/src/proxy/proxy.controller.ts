@@ -1,11 +1,15 @@
-import { Controller, Post, Get, Query, Body, Req, Res, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Query, Body, Req, Res, Logger, Sse, MessageEvent } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ProxyService } from './proxy.service';
 import { ChatCompletionRequest } from './dto/openai.dto';
 import { ConfigService } from '@nestjs/config';
 import { ObservabilityService } from '../observability/observability.service';
 import { CostTrackerService } from '../observability/cost-tracker.service';
-import { createHash } from 'crypto';
+import { AgentLoggerService } from '../utils/agent-logger.service';
+import { createHash, randomUUID } from 'crypto';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { HarnessEntity } from '../core/infra/database/entities/harness.entity';
 
 let requestCounter = 0;
 
@@ -18,13 +22,13 @@ export class ProxyController {
     private configService: ConfigService,
     private observability: ObservabilityService,
     private costTracker: CostTrackerService,
+    private agentLogger: AgentLoggerService,
   ) {}
 
   @Get('models')
-  getModels() {
+  async getModels() {
     const providersConfig = this.configService.get('providers') || {};
     const modelPairs = this.configService.get('model_pairs') || [];
-    const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
 
     // Individual models from providers (only local ones + NVIDIA for direct access)
     const modelsList = Object.values(providersConfig).map((config: any) => ({
@@ -54,16 +58,18 @@ export class ProxyController {
       }
     ]);
 
-    // Orchestrator pairs (exposing both id and name)
-    const orchestratorModels = orchestratorPairs.flatMap((pair: any) => [
+    // Active Harnesses from DB
+    const activeHarnesses = await HarnessEntity.findAll({ where: { isActive: true } });
+
+    const orchestratorModels = activeHarnesses.flatMap((harness) => [
       {
-        id: pair.id,
+        id: harness.code,
         object: 'model',
         created: Math.floor(Date.now() / 1000),
         owned_by: 'madame-agent',
       },
       {
-        id: pair.name,
+        id: harness.name,
         object: 'model',
         created: Math.floor(Date.now() / 1000),
         owned_by: 'madame-agent',
@@ -91,8 +97,8 @@ export class ProxyController {
       },
     ];
 
-    const orchestratorVirtuals = orchestratorPairs.map((pair: any) => ({
-      id: `madame-orchestrator-${pair.id || pair.name}`,
+    const orchestratorVirtuals = activeHarnesses.map((harness) => ({
+      id: `madame-orchestrator-${harness.code}`,
       object: 'model',
       created: Math.floor(Date.now() / 1000),
       owned_by: 'madame-agent',
@@ -122,6 +128,18 @@ export class ProxyController {
   @Get('costs')
   getCosts(@Query('sessionId') sessionId?: string) {
     return this.costTracker.getSessionStats(sessionId);
+  }
+
+  @Get('costs/detailed')
+  getDetailedCosts() {
+    return this.costTracker.getDetailedStats();
+  }
+
+  @Sse('events')
+  sendEvent(): Observable<MessageEvent> {
+    return this.agentLogger.log$.pipe(
+      map(data => ({ data } as MessageEvent))
+    );
   }
 
   @Post('chat/completions')
@@ -172,16 +190,34 @@ export class ProxyController {
 
     this.observability.startTimer(requestId);
 
+    const mainAbortController = new AbortController();
+    const harnessStr = harness ? String(harness) : 'default';
+    this.observability.registerMainRequest(requestId, sessionId, harnessStr, mainAbortController);
+
     const abortHandler = () => {
       this.logger.log(`Client connection closed for ${requestId}. Cancelling active subagents.`);
       this.observability.cancelSubagentsForParent(requestId);
+      this.observability.unregisterMainRequest(requestId);
     };
     req.on('close', abortHandler);
 
-    try {
-      const { response, metadata } =
-        await this.proxyService.handleChatCompletion(body);
+    const abortPromise = new Promise<never>((_, reject) => {
+      mainAbortController.signal.addEventListener('abort', () => {
+        if (this.observability.isHarnessModificationAbort(requestId)) {
+          reject(new Error('harness_modified'));
+        } else {
+          reject(new Error('aborted'));
+        }
+      });
+    });
 
+    try {
+      const { response, metadata } = await Promise.race([
+        this.proxyService.handleChatCompletion(body),
+        abortPromise
+      ]) as any;
+
+      this.observability.unregisterMainRequest(requestId);
       const latencyMs = this.observability.finishTimer(requestId);
 
       const trackSuccess = (outTokens: number) => {
@@ -290,9 +326,70 @@ export class ProxyController {
         res.json(response.data);
       }
     } catch (error: any) {
+      this.observability.finishTimer(requestId);
+      this.observability.unregisterMainRequest(requestId);
+
+      if (error.message === 'harness_modified') {
+        const id = `chatcmpl-${randomUUID().slice(0, 8)}`;
+        const created = Math.floor(Date.now() / 1000);
+        const model = body.model || 'madame-agent';
+        const content = "⚠️ **[CAMBIO DE MODELO]** La configuración del arnés activo ha sido modificada. La ejecución actual ha sido detenida. ¿Deseas retomar la sesión con la nueva configuración?";
+        
+        const responseData = {
+          id,
+          object: 'chat.completion',
+          created,
+          model,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content,
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: Math.ceil(content.length / 3.5),
+            total_tokens: Math.ceil(content.length / 3.5),
+          },
+        };
+
+        if (body.stream) {
+          res.setHeader('Content-Type', 'text/event-stream');
+          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Connection', 'keep-alive');
+
+          // Chunk 1: role
+          res.write(`data: ${JSON.stringify({
+            id, object: 'chat.completion.chunk', created, model,
+            choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+          })}\n\n`);
+
+          // Chunk 2: content
+          res.write(`data: ${JSON.stringify({
+            id, object: 'chat.completion.chunk', created, model,
+            choices: [{ index: 0, delta: { content }, finish_reason: null }],
+          })}\n\n`);
+
+          // Chunk 3: stop
+          res.write(`data: ${JSON.stringify({
+            id, object: 'chat.completion.chunk', created, model,
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          })}\n\n`);
+
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        } else {
+          return res.json(responseData);
+        }
+      }
+
       this.logger.error(`Request ${requestId} failed: ${error.message}`, error.stack);
       this.logger.error(`Request details: model=${body.model || 'unknown'}, body=${JSON.stringify(body).slice(0, 500)}`);
-      this.observability.finishTimer(requestId);
 
       // Use routing metadata from the router if available (attached by callWithRoutingMetadata)
       const routing = error.routingMetadata || {

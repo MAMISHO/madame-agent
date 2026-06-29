@@ -14,39 +14,39 @@ export class ExecutionLogEntity extends Model {
     type: DataType.STRING,
     allowNull: false,
   })
-  sessionId!: string;
+  declare sessionId: string;
 
   @ForeignKey(() => HarnessEntity)
   @Column({
     type: DataType.UUID,
     allowNull: false,
   })
-  harnessId!: string;
+  declare harnessId: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  modelName!: string;
+  declare modelName: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  executionDate!: string;
+  declare executionDate: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  executionTime!: string;
+  declare executionTime: string;
 
   @Column({
     type: DataType.TEXT,
     allowNull: false,
   })
-  log!: string;
+  declare log: string;
 
   @BelongsTo(() => HarnessEntity)
-  harness?: HarnessEntity;
+  declare harness?: HarnessEntity;
 }

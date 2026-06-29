@@ -3,7 +3,8 @@ import { Column, DataType, Model, Table } from 'sequelize-typescript';
 @Table({ tableName: 'provider_configs', timestamps: true })
 export class ProviderConfigEntity extends Model {
   @Column({
-    type: DataType.STRING,
+    type: DataType.UUID,
+    defaultValue: DataType.UUIDV4,
     primaryKey: true,
   })
   declare id: string;
@@ -11,18 +12,25 @@ export class ProviderConfigEntity extends Model {
   @Column({
     type: DataType.STRING,
     allowNull: false,
+    unique: true,
   })
-  name!: string;
+  declare code: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+  })
+  declare name: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: true,
   })
-  apiKey?: string;
+  declare apiKey: string | undefined;
 
   @Column({
     type: DataType.STRING,
     allowNull: true,
   })
-  baseUrl?: string;
+  declare baseUrl: string | undefined;
 }

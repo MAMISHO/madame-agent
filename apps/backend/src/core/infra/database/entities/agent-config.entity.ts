@@ -10,37 +10,44 @@ export class AgentConfigEntity extends Model {
   })
   declare id: string;
 
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+    unique: true,
+  })
+  declare code: string;
+
   @ForeignKey(() => HarnessEntity)
   @Column({
     type: DataType.UUID,
     allowNull: false,
   })
-  harnessId!: string;
+  declare harnessId: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  role!: string;
+  declare role: string;
 
   @Column({
     type: DataType.TEXT,
     allowNull: false,
   })
-  prompt!: string;
+  declare prompt: string;
+
+  @Column({
+    type: DataType.UUID,
+    allowNull: false,
+  })
+  declare providerId: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  providerId!: string;
-
-  @Column({
-    type: DataType.STRING,
-    allowNull: false,
-  })
-  modelName!: string;
+  declare modelName: string;
 
   @BelongsTo(() => HarnessEntity)
-  harness?: HarnessEntity;
+  declare harness?: HarnessEntity;
 }

@@ -77,8 +77,42 @@ export class ObservabilityService {
   private requests: RequestMetrics[] = [];
   private timers = new Map<string, number>();
   private activeSubagents: Map<string, ActiveSubagentTask> = new Map();
+  private activeMainRequests = new Map<string, { abortController: AbortController; harnessId: string; sessionId: string }>();
+  private harnessModificationAbortedRequests = new Set<string>();
 
   constructor(private costTracker: CostTrackerService) {}
+
+  registerMainRequest(requestId: string, sessionId: string, harnessId: string, abortController: AbortController): void {
+    this.activeMainRequests.set(requestId, { abortController, harnessId, sessionId });
+    this.logger.log(`Main request registered: ${requestId} for harness ${harnessId}`);
+  }
+
+  unregisterMainRequest(requestId: string): void {
+    this.activeMainRequests.delete(requestId);
+  }
+
+  isHarnessModificationAbort(requestId: string): boolean {
+    return this.harnessModificationAbortedRequests.has(requestId);
+  }
+
+  clearHarnessModificationAbort(requestId: string): void {
+    this.harnessModificationAbortedRequests.delete(requestId);
+  }
+
+  cancelRequestsForHarness(harnessId: string): void {
+    let cancelCount = 0;
+    for (const [requestId, record] of this.activeMainRequests.entries()) {
+      if (record.harnessId === harnessId) {
+        this.harnessModificationAbortedRequests.add(requestId);
+        record.abortController.abort();
+        this.cancelSubagentsForParent(requestId);
+        cancelCount++;
+      }
+    }
+    if (cancelCount > 0) {
+      this.logger.log(`Cancelled ${cancelCount} main requests due to harness modification: ${harnessId}`);
+    }
+  }
 
   startTimer(requestId: string): void {
     this.timers.set(requestId, Date.now());

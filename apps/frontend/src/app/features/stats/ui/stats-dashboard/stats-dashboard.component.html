@@ -1,0 +1,139 @@
+<header class="mochi-panel-header">
+  <div>
+    <h2>System Dashboard</h2>
+    <p style="color: #71717a; margin: 4px 0 0 0; font-size: 14px;">Real-time stats and execution summary</p>
+  </div>
+  <div class="mochi-status-pill" [class.connected]="summary">
+    <span class="dot"></span>
+    <span>{{ summary ? 'CONNECTED' : 'DISCONNECTED' }}</span>
+  </div>
+</header>
+
+<div class="mochi-panel-content">
+  @if (loading) {
+    <div class="mochi-grid">
+      <div class="mochi-card">
+        <div class="mochi-skeleton mochi-skeleton-text" style="width: 40%;"></div>
+        <div class="mochi-skeleton mochi-skeleton-title" style="width: 50%; height: 36px; margin-top: 12px;"></div>
+        <div class="mochi-skeleton mochi-skeleton-text" style="width: 70%; margin-top: 8px;"></div>
+      </div>
+      <div class="mochi-card">
+        <div class="mochi-skeleton mochi-skeleton-text" style="width: 45%;"></div>
+        <div class="mochi-skeleton mochi-skeleton-title" style="width: 55%; height: 36px; margin-top: 12px;"></div>
+        <div class="mochi-skeleton mochi-skeleton-text" style="width: 60%; margin-top: 8px;"></div>
+      </div>
+    </div>
+    <div class="mochi-block-section" style="margin-top: 32px;">
+      <div class="mochi-skeleton mochi-skeleton-title" style="width: 35%;"></div>
+      <div class="mochi-skeleton mochi-skeleton-list-item"></div>
+      <div class="mochi-skeleton mochi-skeleton-list-item"></div>
+    </div>
+  }
+
+  @if (error) {
+    <div class="mochi-block-section" style="text-align: center;">
+      <span style="font-size: 40px; display: block; margin-bottom: 12px;">⚠️</span>
+      <h4 style="margin: 0 0 8px 0; color: #ffffff; font-size: 18px;">Connection Timeout</h4>
+      <p style="color: #71717a; margin-bottom: 20px;">{{ error }}</p>
+      <button (click)="retry.emit()" class="mochi-action-btn">Retry Sync</button>
+    </div>
+  }
+
+  @if (summary; as s) {
+    <div class="mochi-grid">
+      <div class="mochi-card">
+        <div class="mochi-card-header">
+          <span class="mochi-card-title">Cloud Spend</span>
+          <span style="font-size: 20px;">☁️</span>
+        </div>
+        <div class="mochi-card-value">${{ s.totalCloudUsd.toFixed(4) }}</div>
+        <div class="mochi-card-footer">
+          <span>Active Agents: {{ s.activeAgents }}</span>
+          <span class="mochi-dot-separator">•</span>
+          <span>Requests: {{ s.totalRequests }}</span>
+        </div>
+      </div>
+
+      <div class="mochi-card">
+        <div class="mochi-card-header">
+          <span class="mochi-card-title">Estimated Savings</span>
+          <span style="font-size: 20px;">💰</span>
+        </div>
+        <div class="mochi-card-value">${{ s.totalSavedUsd.toFixed(4) }}</div>
+        <div class="mochi-card-footer">
+          <span>Local offloading ratio</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hierarchical Cost Breakdown -->
+    <div class="mochi-block-section" style="margin-top: 32px;">
+      <h3>Hierarchical Cost Breakdown</h3>
+
+      @if (sessions.length > 0) {
+        <p style="color: #71717a; margin-bottom: 24px; font-size: 13px;">Detailed spend analysis by Session, Harness, Agent role, and LLM Model</p>
+
+        <div class="mochi-hierarchy" style="display: flex; flex-direction: column; gap: 24px;">
+          @for (se of sessions; track se.sessionId) {
+            <div class="hierarchy-session-card" style="background: #202024; border: 1px solid #2d2d34; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+              <div class="hierarchy-session-header" style="background: #27272a; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2d2d34; font-size: 13px; font-weight: 600; cursor: pointer;" (click)="toggleSession.emit(se.sessionId)">
+                <div>
+                  <span style="color: #71717a; margin-right: 6px;">SESSION:</span>
+                  <span style="color: #ffffff; font-family: monospace;">{{ se.sessionId }}</span>
+                </div>
+                <div style="color: #e4e4e7;">
+                  Cloud Spend: <span style="color: #f43f5e; margin-right: 12px;">${{ se.totalCloudUsd.toFixed(4) }}</span>
+                  Savings: <span style="color: #10b981;">${{ se.totalSavedUsd.toFixed(4) }}</span>
+                </div>
+              </div>
+
+              <div class="hierarchy-session-body" style="padding: 20px; display: flex; flex-direction: column; gap: 20px;">
+                @for (h of se.harnesses; track h.harnessName) {
+                  <div class="hierarchy-harness-block" style="border-left: 3px solid #4f46e5; padding-left: 16px;">
+                    <div class="hierarchy-harness-title" style="font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #ffffff; display: flex; justify-content: space-between; align-items: center;">
+                      <span>🕸️ Harness: {{ h.harnessName }}</span>
+                      <span style="font-size: 12px; font-weight: 500; color: #a1a1aa;">Spend: ${{ h.totalCloudUsd.toFixed(4) }} | Savings: ${{ h.totalSavedUsd.toFixed(4) }}</span>
+                    </div>
+
+                    <div class="hierarchy-agents-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
+                      @for (a of h.agents; track a.role) {
+                        <div class="hierarchy-agent-card" style="background: #1a1a1e; border: 1px solid #27272a; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                          <div class="agent-role-header" style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: #ec4899; letter-spacing: 0.5px;">{{ a.role }}</div>
+                          <div class="agent-costs" style="font-size: 12px; color: #a1a1aa; display: flex; justify-content: space-between;">
+                            <span>Spend: <strong style="color: #e4e4e7;">${{ a.totalCloudUsd.toFixed(4) }}</strong></span>
+                            <span>Savings: <strong style="color: #e4e4e7;">${{ a.totalSavedUsd.toFixed(4) }}</strong></span>
+                          </div>
+
+                          <div class="models-list" style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #27272a; padding-top: 8px;">
+                            @for (m of a.models; track m.model) {
+                              <div class="model-item" style="font-size: 11px; color: #71717a;">
+                                <div class="model-name" style="font-weight: 600; color: #e4e4e7;">🤖 {{ m.model }}</div>
+                                <div class="model-tokens" style="margin: 2px 0;">In: {{ m.inputTokens.toLocaleString() }} | Out: {{ m.outputTokens.toLocaleString() }}</div>
+                                <div class="model-cost" style="color: #f43f5e; font-weight: 600;">Cost: ${{ m.totalCloudUsd.toFixed(4) }}</div>
+                              </div>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <div style="text-align: center; padding: 32px 20px; border: 1px dashed #27272a; border-radius: 20px; margin-top: 12px;">
+          <span style="font-size: 32px; display: block; margin-bottom: 12px;">📊</span>
+          <p style="color: #a1a1aa; font-size: 13px; margin: 0; font-weight: 600;">No session executions recorded yet.</p>
+          <p style="color: #71717a; font-size: 12px; margin: 6px 0 0 0; line-height: 1.5;">Execute a multi-agent workflow chat session in OpenCode to see token spends grouped by Session > Harness > Agent > Model here.</p>
+        </div>
+      }
+    </div>
+
+    <div class="mochi-block-section">
+      <h3>SQLite + Clean Architecture Harness</h3>
+      <p>Madame-Agent has initialized a persistent database instance under <code>madame-agent.sqlite</code>. Custom workflows, prompts, log historical events, and models connection properties are safely recorded here.</p>
+    </div>
+  }
+</div>

@@ -1,0 +1,146 @@
+<section class="mochi-panel mochi-deck-workspace">
+  <header class="mochi-panel-header">
+    <div>
+      <h2>Orchestration Workflow</h2>
+      <p style="color: #71717a; margin: 4px 0 0 0; font-size: 14px;">Harness: {{ harness?.name }}</p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <button (click)="toggleConsole.emit()" class="mochi-action-btn" style="background: #27272a; border: 1px solid #3f3f46; color: white; padding: 8px 16px; font-size: 13px; box-shadow: none;">
+        📟 {{ showConsole ? 'Hide Console' : 'Show Console' }}
+      </button>
+      @if (harness?.isDefault) {
+        <span class="mochi-status-pill" style="color: #fbbf24; border-color: #fbbf24;">INMUTABLE DEFAULT</span>
+      }
+    </div>
+  </header>
+
+  <div class="mochi-panel-content" style="display: flex; flex-direction: column;">
+    @if (isLoading) {
+      <div class="graph-container" style="flex: 1; min-height: 400px; justify-content: center; align-items: center;">
+        <div class="graph-row">
+          <div class="mochi-skeleton mochi-skeleton-node" style="max-width: 250px; width: 250px;"></div>
+        </div>
+        <div class="graph-arrows-down">⬇️ ⬇️ ⬇️</div>
+        <div class="graph-row-three">
+          <div class="mochi-skeleton mochi-skeleton-node"></div>
+          <div class="mochi-skeleton mochi-skeleton-node"></div>
+          <div class="mochi-skeleton mochi-skeleton-node"></div>
+        </div>
+        <div class="graph-arrows-down">⬇️ ⬇️</div>
+        <div class="graph-row-two">
+          <div class="mochi-skeleton mochi-skeleton-node"></div>
+          <div class="mochi-skeleton mochi-skeleton-node"></div>
+        </div>
+      </div>
+    } @else {
+      @if (harness) {
+        <div class="graph-instructions" style="flex-shrink: 0;">
+          <p>💡 Click on any agent node to edit its prompt, provider connection, or model definition.</p>
+        </div>
+      }
+
+      <div class="graph-container" style="flex: 1; min-height: 400px;">
+        <!-- Orchestrator -->
+        <div class="graph-row">
+          @if (getAgentByRole('orchestrator'); as agent) {
+            <div [class]="'graph-node orchestrator-node ' + (selectedAgent?.role === agent.role ? 'editing ' : '') + agentStates['orchestrator']" (click)="selectAgent.emit(agent)">
+              <div class="node-badge">Orchestrator</div>
+              <div class="node-model">{{ agent.modelName }}</div>
+              <div class="node-provider">{{ agent.providerId }}</div>
+              @if (agentStates['orchestrator'] === 'working') {
+                <div class="node-status-pulse">WORKING</div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="graph-arrows-down">⬇️ ⬇️ ⬇️</div>
+
+        <!-- Middle Layer -->
+        <div class="graph-row-three">
+          @if (getAgentByRole('preparer'); as agent) {
+            <div [class]="'graph-node preparer-node ' + (selectedAgent?.role === agent.role ? 'editing ' : '') + agentStates['preparer']" (click)="selectAgent.emit(agent)">
+              <div class="node-badge">Preparer</div>
+              <div class="node-model">{{ agent.modelName }}</div>
+              <div class="node-provider">{{ agent.providerId }}</div>
+              @if (agentStates['preparer'] === 'working') {
+                <div class="node-status-pulse">WORKING</div>
+              }
+            </div>
+          }
+
+          @if (getAgentByRole('planner'); as agent) {
+            <div [class]="'graph-node planner-node ' + (selectedAgent?.role === agent.role ? 'editing ' : '') + agentStates['planner']" (click)="selectAgent.emit(agent)">
+              <div class="node-badge">Planner</div>
+              <div class="node-model">{{ agent.modelName }}</div>
+              <div class="node-provider">{{ agent.providerId }}</div>
+              @if (agentStates['planner'] === 'working') {
+                <div class="node-status-pulse">WORKING</div>
+              }
+            </div>
+          }
+
+          @if (getAgentByRole('supervisor'); as agent) {
+            <div [class]="'graph-node supervisor-node ' + (selectedAgent?.role === agent.role ? 'editing ' : '') + agentStates['supervisor']" (click)="selectAgent.emit(agent)">
+              <div class="node-badge">Supervisor</div>
+              <div class="node-model">{{ agent.modelName }}</div>
+              <div class="node-provider">{{ agent.providerId }}</div>
+              @if (agentStates['supervisor'] === 'working') {
+                <div class="node-status-pulse">WORKING</div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="graph-arrows-down">⬇️ ⬇️</div>
+
+        <!-- Bottom Layer -->
+        <div class="graph-row-two">
+          @if (getAgentByRole('executor'); as agent) {
+            <div [class]="'graph-node executor-node ' + (selectedAgent?.role === agent.role ? 'editing ' : '') + agentStates['executor']" (click)="selectAgent.emit(agent)">
+              <div class="node-badge">Executor (Tools)</div>
+              <div class="node-model">{{ agent.modelName }}</div>
+              <div class="node-provider">{{ agent.providerId }}</div>
+              @if (agentStates['executor'] === 'working') {
+                <div class="node-status-pulse">WORKING</div>
+              }
+            </div>
+          }
+
+          @if (getAgentByRole('qa'); as agent) {
+            <div [class]="'graph-node qa-node ' + (selectedAgent?.role === agent.role ? 'editing ' : '') + agentStates['qa']" (click)="selectAgent.emit(agent)">
+              <div class="node-badge">QA Verification</div>
+              <div class="node-model">{{ agent.modelName }}</div>
+              <div class="node-provider">{{ agent.providerId }}</div>
+              @if (agentStates['qa'] === 'working') {
+                <div class="node-status-pulse">WORKING</div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="loop-indicator">
+          <span>🔄 Loop: Executor ⇄ QA (Regulated by Supervisor)</span>
+        </div>
+      </div>
+
+      <!-- Terminal Logs Panel -->
+      @if (showConsole) {
+        <div class="mochi-terminal-panel" style="margin-top: 24px; flex-shrink: 0;">
+          <div class="terminal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #18181b; border-bottom: 1px solid #27272a; border-radius: 16px 16px 0 0;">
+            <span style="font-family: monospace; font-size: 13px; font-weight: 700; color: #a1a1aa;">Console Logs Stream (SSE)</span>
+            <button (click)="clearLogs.emit()" style="background: transparent; border: 1px solid #3f3f46; color: #a1a1aa; padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">Clear</button>
+          </div>
+          <div class="terminal-body" style="height: 180px; overflow-y: auto; background: #09090b; padding: 16px; font-family: monospace; font-size: 12px; color: #4ade80; line-height: 1.5; border-radius: 0 0 16px 16px; border: 1px solid #27272a; border-top: none;">
+            @for (log of consoleLogs; track $index) {
+              <div style="margin-bottom: 4px; white-space: pre-wrap;">{{ log }}</div>
+            }
+            @if (consoleLogs.length === 0) {
+              <div style="color: #71717a; text-align: center; margin-top: 60px;">No events recorded. Initiate a chat in OpenCode to stream workflow logs here in real-time.</div>
+            }
+          </div>
+        </div>
+      }
+    }
+  </div>
+</section>

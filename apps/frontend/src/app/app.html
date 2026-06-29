@@ -19,6 +19,10 @@
         <span class="icon">🕸️</span>
         <span>Madame-Harness</span>
       </button>
+      <button (click)="currentView.set('resources')" class="mochi-menu-item" [class.active]="currentView() === 'resources'">
+        <span class="icon">📦</span>
+        <span>Providers & Resources</span>
+      </button>
     </nav>
     
     <div class="mochi-footer">
@@ -26,262 +30,17 @@
     </div>
   </aside>
 
-  <!-- Panel 2: Madame-Stats View -->
+  <!-- Feature Views -->
   @if (currentView() === 'stats') {
-    <main class="mochi-panel mochi-deck-workspace">
-      <header class="mochi-panel-header">
-        <div>
-          <h2>System Dashboard</h2>
-          <p style="color: #71717a; margin: 4px 0 0 0; font-size: 14px;">Real-time stats and execution summary</p>
-        </div>
-        
-        <div class="mochi-status-pill" [class.connected]="stats()">
-          <span class="dot"></span>
-          <span>{{ stats() ? 'CONNECTED' : 'DISCONNECTED' }}</span>
-        </div>
-      </header>
-
-      <div class="mochi-panel-content">
-        <!-- Loading State -->
-        @if (loading()) {
-          <div class="mochi-block-section" style="text-align: center; padding: 48px;">
-            <div class="spinner"></div>
-            <p style="color: #a1a1aa;">Establishing connection to Madame-Agent server...</p>
-          </div>
-        }
-
-        <!-- Error State -->
-        @if (error()) {
-          <div class="mochi-block-section" style="text-align: center;">
-            <span style="font-size: 40px; display: block; margin-bottom: 12px;">⚠️</span>
-            <h4 style="margin: 0 0 8px 0; color: #ffffff; font-size: 18px;">Connection Timeout</h4>
-            <p style="color: #71717a; margin-bottom: 20px;">{{ error() }}</p>
-            <button (click)="loadData()" class="mochi-action-btn">Retry Sync</button>
-          </div>
-        }
-
-        <!-- Cost Stats Cards -->
-        @if (stats(); as s) {
-          <div class="mochi-grid">
-            <!-- Cloud Cost Card -->
-            <div class="mochi-card">
-              <div class="mochi-card-header">
-                <span class="mochi-card-title">Cloud Spend</span>
-                <span style="font-size: 20px;">☁️</span>
-              </div>
-              <div class="mochi-card-value">${{ s.totalCloudUsd.toFixed(4) }}</div>
-              <div class="mochi-card-footer">
-                <span>Input: {{ s.cloudInputTokens.toLocaleString() }} tkn</span>
-                <span class="mochi-dot-separator">•</span>
-                <span>Output: {{ s.cloudOutputTokens.toLocaleString() }} tkn</span>
-              </div>
-            </div>
-
-            <!-- Local Savings Card -->
-            <div class="mochi-card">
-              <div class="mochi-card-header">
-                <span class="mochi-card-title">Estimated Savings</span>
-                <span style="font-size: 20px;">💰</span>
-              </div>
-              <div class="mochi-card-value">${{ s.totalSavedUsd.toFixed(4) }}</div>
-              <div class="mochi-card-footer">
-                <span>Input: {{ s.localInputTokens.toLocaleString() }} tkn</span>
-                <span class="mochi-dot-separator">•</span>
-                <span>Output: {{ s.localOutputTokens.toLocaleString() }} tkn</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- System Details Section -->
-          <div class="mochi-block-section">
-            <h3>SQLite + Clean Architecture Harness</h3>
-            <p>Madame-Agent has initialized a persistent database instance under <code>madame-agent.sqlite</code>. Custom workflows, prompts, log historical events, and models connection properties are safely recorded here.</p>
-          </div>
-        }
-      </div>
-    </main>
+    <app-stats-page />
   }
 
-  <!-- Panel 2: Madame-Harness List & Flowchart View -->
   @if (currentView() === 'harness') {
-    <!-- Sub-Panel: Harness Registry Deck -->
-    <section class="mochi-panel" style="width: 320px;">
-      <div class="mochi-panel-header">
-        <h2>Harness List</h2>
-      </div>
-      <div class="mochi-panel-content" style="padding-top: 0;">
-        <!-- Add New Harness -->
-        <div style="display: flex; gap: 8px; margin-bottom: 20px;">
-          <input #newHarnessInput type="text" placeholder="New harness name" style="flex: 1; padding: 10px 16px; border-radius: 9999px; border: 1px solid #27272a; background: #0f172a; color: white; font-size: 13px;">
-          <button (click)="createHarness(newHarnessInput)" class="mochi-action-btn" style="padding: 10px 16px; font-size: 13px;">Add</button>
-        </div>
+    <app-harness-page />
+  }
 
-        <!-- List harnesses -->
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          @for (h of harnesses(); track h.id) {
-            <div class="harness-item-card" [class.selected]="selectedHarness()?.id === h.id">
-              <div class="harness-meta" (click)="selectHarness(h)">
-                <span class="harness-name">{{ h.name }}</span>
-                @if (h.isDefault) {
-                  <span class="badge default-badge">DEFAULT</span>
-                }
-                @if (h.isActive) {
-                  <span class="badge active-badge">ACTIVE</span>
-                }
-              </div>
-              <div class="harness-actions">
-                @if (!h.isActive) {
-                  <button (click)="makeHarnessActive(h)" class="harness-btn activate-btn">Activate</button>
-                }
-                @if (!h.isDefault) {
-                  <button (click)="deleteHarness(h)" class="harness-btn delete-btn">Delete</button>
-                }
-              </div>
-            </div>
-          }
-        </div>
-      </div>
-    </section>
-
-    <!-- Sub-Panel: Flowchart Grafo Workspace -->
-    <section class="mochi-panel mochi-deck-workspace">
-      <header class="mochi-panel-header">
-        <div>
-          <h2>Orchestration Workflow</h2>
-          <p style="color: #71717a; margin: 4px 0 0 0; font-size: 14px;">Harness: {{ selectedHarness()?.name }}</p>
-        </div>
-        @if (selectedHarness()?.isDefault) {
-          <span class="mochi-status-pill" style="color: #fbbf24; border-color: #fbbf24;">INMUTABLE DEFAULT</span>
-        }
-      </header>
-
-      <div class="mochi-panel-content">
-        @if (selectedHarness()) {
-          <div class="graph-instructions">
-            <p>💡 Click on any agent node to edit its prompt, provider connection, or model definition.</p>
-          </div>
-
-          <!-- Grafo visual de orquestación -->
-          <div class="graph-container">
-            <!-- Orchestrator (Top Node) -->
-            <div class="graph-row">
-              @if (getAgentByRole('orchestrator'); as agent) {
-                <div class="graph-node orchestrator-node" (click)="selectAgent(agent)" [class.editing]="selectedAgent()?.role === agent.role">
-                  <div class="node-badge">Orchestrator</div>
-                  <div class="node-model">{{ agent.modelName }}</div>
-                  <div class="node-provider">{{ agent.providerId }}</div>
-                </div>
-              }
-            </div>
-
-            <!-- Flow Arrows Down -->
-            <div class="graph-arrows-down">⬇️ ⬇️ ⬇️</div>
-
-            <!-- Middle Layer (Preparer, Planner, Supervisor) -->
-            <div class="graph-row-three">
-              @if (getAgentByRole('preparer'); as agent) {
-                <div class="graph-node preparer-node" (click)="selectAgent(agent)" [class.editing]="selectedAgent()?.role === agent.role">
-                  <div class="node-badge">Preparer</div>
-                  <div class="node-model">{{ agent.modelName }}</div>
-                  <div class="node-provider">{{ agent.providerId }}</div>
-                </div>
-              }
-
-              @if (getAgentByRole('planner'); as agent) {
-                <div class="graph-node planner-node" (click)="selectAgent(agent)" [class.editing]="selectedAgent()?.role === agent.role">
-                  <div class="node-badge">Planner</div>
-                  <div class="node-model">{{ agent.modelName }}</div>
-                  <div class="node-provider">{{ agent.providerId }}</div>
-                </div>
-              }
-
-              @if (getAgentByRole('supervisor'); as agent) {
-                <div class="graph-node supervisor-node" (click)="selectAgent(agent)" [class.editing]="selectedAgent()?.role === agent.role">
-                  <div class="node-badge">Supervisor</div>
-                  <div class="node-model">{{ agent.modelName }}</div>
-                  <div class="node-provider">{{ agent.providerId }}</div>
-                </div>
-              }
-            </div>
-
-            <!-- Flow Arrows Down -->
-            <div class="graph-arrows-down">⬇️ ⬇️</div>
-
-            <!-- Bottom Layer (Executor, QA) -->
-            <div class="graph-row-two">
-              @if (getAgentByRole('executor'); as agent) {
-                <div class="graph-node executor-node" (click)="selectAgent(agent)" [class.editing]="selectedAgent()?.role === agent.role">
-                  <div class="node-badge">Executor (Tools)</div>
-                  <div class="node-model">{{ agent.modelName }}</div>
-                  <div class="node-provider">{{ agent.providerId }}</div>
-                </div>
-              }
-
-              @if (getAgentByRole('qa'); as agent) {
-                <div class="graph-node qa-node" (click)="selectAgent(agent)" [class.editing]="selectedAgent()?.role === agent.role">
-                  <div class="node-badge">QA Verification</div>
-                  <div class="node-model">{{ agent.modelName }}</div>
-                  <div class="node-provider">{{ agent.providerId }}</div>
-                </div>
-              }
-            </div>
-
-            <!-- Loop connection visual indicators -->
-            <div class="loop-indicator">
-              <span>🔄 Loop: Executor ⇄ QA (Regulated by Supervisor)</span>
-            </div>
-          </div>
-        }
-      </div>
-    </section>
-
-    <!-- Sub-Panel: Agent Detail Configuration Panel (Slides in when an agent is selected) -->
-    @if (selectedAgent(); as agent) {
-      <section class="mochi-panel agent-edit-deck" style="width: 420px;">
-        <header class="mochi-panel-header">
-          <h2>Configure: {{ agent.role.toUpperCase() }}</h2>
-          <button (click)="selectedAgent.set(null)" style="background: transparent; border: none; color: #71717a; font-size: 20px; cursor: pointer;">✕</button>
-        </header>
-
-        <div class="mochi-panel-content" style="display: flex; flex-direction: column; gap: 20px;">
-          <!-- Read-only default notice -->
-          @if (selectedHarness()?.isDefault) {
-            <div class="warning-alert">
-              ⚠️ The default harness is read-only. Create a custom harness to edit prompts or model connections.
-            </div>
-          }
-
-          <!-- Provider Selection -->
-          <div class="form-group">
-            <label>LLM Connection Provider</label>
-            <select [value]="editProvider()" (change)="onProviderChange($event)" [disabled]="selectedHarness()?.isDefault" class="mochi-input select-input">
-              @for (p of providers; track p) {
-                <option [value]="p">{{ p.toUpperCase() }}</option>
-              }
-            </select>
-          </div>
-
-          <!-- Model Name -->
-          <div class="form-group">
-            <label>Model Identifier</label>
-            <input type="text" [value]="editModel()" (input)="onModelChange($event)" [disabled]="selectedHarness()?.isDefault" placeholder="e.g. gemma4:latest-oc" class="mochi-input text-input">
-          </div>
-
-          <!-- Prompt Editor -->
-          <div class="form-group" style="flex: 1; display: flex; flex-direction: column;">
-            <label>System Instruction (Prompt)</label>
-            <textarea [value]="editPrompt()" (input)="onPromptChange($event)" [disabled]="selectedHarness()?.isDefault" class="mochi-input textarea-input" style="flex: 1; min-height: 250px; font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
-          </div>
-
-          <!-- Save Button -->
-          @if (!selectedHarness()?.isDefault) {
-            <button (click)="saveAgentConfig()" class="mochi-action-btn" style="width: 100%; margin-top: 10px;">
-              Save Config
-            </button>
-          }
-        </div>
-      </section>
-    }
+  @if (currentView() === 'resources') {
+    <app-resources-page />
   }
   
 </div>

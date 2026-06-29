@@ -1,0 +1,82 @@
+<div class="resources-container">
+  
+  <!-- Providers Panel -->
+  <section class="resource-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h2 style="margin: 0; color: white;">Custom Providers</h2>
+      <button (click)="showProvForm.set(true)" class="mochi-action-btn" style="padding: 6px 12px; font-size: 12px;">+ Add Provider</button>
+    </div>
+
+    @if (showProvForm()) {
+      <div style="background: #0f172a; padding: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;">
+        <input type="text" [value]="newProvCode()" (input)="newProvCode.set($any($event.target).value)" placeholder="Code (e.g. custom-ollama)" class="mochi-input text-input">
+        <input type="text" [value]="newProvName()" (input)="newProvName.set($any($event.target).value)" placeholder="Name" class="mochi-input text-input">
+        <input type="text" [value]="newProvBaseUrl()" (input)="newProvBaseUrl.set($any($event.target).value)" placeholder="Base URL" class="mochi-input text-input">
+        <input type="password" [value]="newProvApiKey()" (input)="newProvApiKey.set($any($event.target).value)" placeholder="API Key" class="mochi-input text-input">
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button (click)="showProvForm.set(false)" class="harness-btn activate-btn">Cancel</button>
+          <button (click)="onSaveProvider()" class="mochi-action-btn" style="padding: 6px 12px;">Save</button>
+        </div>
+      </div>
+    }
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      @if (loading$ | async) {
+        <div class="mochi-skeleton mochi-skeleton-list-item"></div>
+        <div class="mochi-skeleton mochi-skeleton-list-item"></div>
+      } @else {
+        @for (p of providers$ | async; track p.id) {
+          <div style="background: #000; padding: 12px; border-radius: 8px; border: 1px solid #27272a; display: flex; justify-content: space-between;">
+            <div>
+              <strong style="color: white; font-size: 14px;">{{ p.name }}</strong>
+              <div style="color: #a1a1aa; font-size: 11px;">{{ p.code }}</div>
+            </div>
+            <button (click)="onDeleteProvider(p.id)" class="harness-btn delete-btn">Delete</button>
+          </div>
+        }
+      }
+    </div>
+  </section>
+
+  <!-- Dúo Scalable Models Panel -->
+  <section class="resource-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h2 style="margin: 0; color: white;">Dúo Scalable Models</h2>
+      <button (click)="showDuoForm.set(true)" class="mochi-action-btn" style="padding: 6px 12px; font-size: 12px;">+ Add Dúo</button>
+    </div>
+
+    @if (showDuoForm()) {
+      <div style="background: #0f172a; padding: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;">
+        <input type="text" [value]="newDuoCode()" (input)="newDuoCode.set($any($event.target).value)" placeholder="Code" class="mochi-input text-input">
+        <input type="text" [value]="newDuoName()" (input)="newDuoName.set($any($event.target).value)" placeholder="Name" class="mochi-input text-input">
+        <input type="text" [value]="newDuoLocalProv()" (input)="newDuoLocalProv.set($any($event.target).value)" placeholder="Local Provider ID" class="mochi-input text-input">
+        <input type="text" [value]="newDuoLocalModel()" (input)="newDuoLocalModel.set($any($event.target).value)" placeholder="Local Model" class="mochi-input text-input">
+        <input type="text" [value]="newDuoCloudProv()" (input)="newDuoCloudProv.set($any($event.target).value)" placeholder="Cloud Provider ID" class="mochi-input text-input">
+        <input type="text" [value]="newDuoCloudModel()" (input)="newDuoCloudModel.set($any($event.target).value)" placeholder="Cloud Model" class="mochi-input text-input">
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button (click)="showDuoForm.set(false)" class="harness-btn activate-btn">Cancel</button>
+          <button (click)="onSaveDuo()" class="mochi-action-btn" style="padding: 6px 12px;">Save</button>
+        </div>
+      </div>
+    }
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      @if (loading$ | async) {
+        <div class="mochi-skeleton mochi-skeleton-list-item"></div>
+        <div class="mochi-skeleton mochi-skeleton-list-item"></div>
+      } @else {
+        @for (d of scalableModels$ | async; track d.id) {
+          <div style="background: #000; padding: 12px; border-radius: 8px; border: 1px solid #27272a; display: flex; justify-content: space-between;">
+            <div>
+              <strong style="color: white; font-size: 14px;">{{ d.name }}</strong>
+              <div style="color: #a1a1aa; font-size: 11px;">{{ d.code }}</div>
+              <div style="color: #71717a; font-size: 10px; margin-top: 4px;">{{ d.localModelName }} &rarr; {{ d.cloudModelName }}</div>
+            </div>
+            <button (click)="onDeleteScalableModel(d.id)" class="harness-btn delete-btn">Delete</button>
+          </div>
+        }
+      }
+    </div>
+  </section>
+
+</div>

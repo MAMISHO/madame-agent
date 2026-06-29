@@ -3,9 +3,10 @@ import { ProxyController } from './proxy.controller';
 import { ProxyService } from './proxy.service';
 import { RouterModule } from '../router/router.module';
 import { ObservabilityModule } from '../observability/observability.module';
+import { UtilsModule } from '../utils/utils.module';
 
 @Module({
-  imports: [RouterModule, ObservabilityModule],
+  imports: [RouterModule, ObservabilityModule, UtilsModule],
   controllers: [ProxyController],
   providers: [ProxyService],
 })

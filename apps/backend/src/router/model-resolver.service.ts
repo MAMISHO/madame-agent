@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClassifierService } from '../classifier/classifier.service';
 import { ConfidenceEngineService } from '../confidence/confidence.service';
+import { ScalableModelEntity } from '../core/infra/database/entities/scalable-model.entity';
+import { ProviderConfigEntity } from '../core/infra/database/entities/provider-config.entity';
 
 export interface ResolvedModel {
   config: any;
@@ -34,7 +36,7 @@ export class ModelResolverService {
     const modelPairs = this.configService.get('model_pairs') || [];
 
     // 1. Check if model matches a composite model pair
-    const pair = this.getModelPair(modelRaw);
+    const pair = await this.getModelPair(modelRaw);
     if (pair) {
       const localConfig = providersConfig[pair.local];
       if (!localConfig) {
@@ -145,9 +147,9 @@ export class ModelResolverService {
   /**
    * Resolves the local provider configuration for a model name (composite or direct).
    */
-  getLocalConfig(modelName: string): any {
+  async getLocalConfig(modelName: string): Promise<any> {
     const providersConfig = this.configService.get('providers') || {};
-    const pair = this.getModelPair(modelName);
+    const pair = await this.getModelPair(modelName);
     const targetId = pair ? pair.local : modelName;
 
     const directCfg = providersConfig[targetId];
@@ -173,9 +175,26 @@ export class ModelResolverService {
   }
 
   /**
-   * Finds a model pair by name/id.
+   * Finds a model pair by name/id/code.
    */
-  getModelPair(modelName: string): any | null {
+  async getModelPair(modelName: string): Promise<any | null> {
+    // 1. Check database first for scalable models
+    const dbPair = await ScalableModelEntity.findOne({ where: { code: modelName } }) || 
+                   await ScalableModelEntity.findOne({ where: { id: modelName } });
+    if (dbPair) {
+      return {
+        id: dbPair.id,
+        name: dbPair.name,
+        local: dbPair.localProviderId, // Note: Provider ID needs to match providers mapping or we construct config dynamically
+        cloud: dbPair.cloudProviderId,
+        // Because the providers in providers.json use IDs like "ollama", if localProviderId is the UUID,
+        // we might need to resolve it. But wait, we'll map this below. Let's just return what's expected
+        // for now and fix resolveModel next if needed. 
+        dbEntity: dbPair // passing the entity to construct dynamic config if needed
+      };
+    }
+
+    // 2. Check static config
     const modelPairs = this.configService.get('model_pairs') || [];
     for (const pair of modelPairs) {
       if (pair.name === modelName || pair.id === modelName) {

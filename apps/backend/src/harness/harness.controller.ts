@@ -25,8 +25,15 @@ function getDefaultPromptText(role: string): string {
   }
 }
 
+import { RepositoryValidator } from '../core/application/services/repository-validator.service';
+import { ObservabilityService } from '../observability/observability.service';
+
 @Controller('v1/harness')
 export class HarnessController {
+  constructor(
+    private readonly validator: RepositoryValidator,
+    private readonly observability: ObservabilityService,
+  ) {}
 
   @Get()
   async listAll() {
@@ -34,6 +41,7 @@ export class HarnessController {
     let defaultHarness = await HarnessEntity.findOne({ where: { isDefault: true } });
     if (!defaultHarness) {
       defaultHarness = await HarnessEntity.create({
+        code: 'default-harness',
         name: 'Default Harness',
         isDefault: true,
         isActive: true,
@@ -42,6 +50,7 @@ export class HarnessController {
       const roles = ['preparer', 'planner', 'orchestrator', 'executor', 'qa', 'supervisor'];
       for (const role of roles) {
         await AgentConfigEntity.create({
+          code: `default-harness-${role}`,
           harnessId: defaultHarness.id,
           role,
           prompt: getDefaultPromptText(role),
@@ -55,51 +64,100 @@ export class HarnessController {
   }
 
   @Post()
-  async create(@Body() body: { name: string }) {
-    const { name } = body;
+  async create(@Body() body: { code: string; name: string; cloneFromHarnessId?: string }) {
+    const { code, name, cloneFromHarnessId } = body;
+    
+    if (!code) {
+      throw new BadRequestException('Harness code is required.');
+    }
+    this.validator.validateCode(code);
+
     if (!name) {
       throw new BadRequestException('Harness name is required.');
     }
 
     const trimmedName = name.trim();
 
-    // Validations: min 8, max 25 characters, no spaces, no special characters
-    if (trimmedName.length < 8 || trimmedName.length > 25) {
-      throw new BadRequestException('Harness name must be between 8 and 25 characters.');
+    // Validations: min 8, max 50 characters, no spaces, no special characters
+    if (trimmedName.length < 8 || trimmedName.length > 50) {
+      throw new BadRequestException('Harness name must be between 8 and 50 characters.');
     }
 
-    const nameRegex = /^[a-zA-Z0-9_\-]+$/;
+    const nameRegex = /^[a-zA-Z0-9_\-\s]+$/;
     if (!nameRegex.test(trimmedName)) {
-      throw new BadRequestException('Harness name cannot contain spaces or special characters (only letters, numbers, dashes, and underscores are allowed).');
+      throw new BadRequestException('Harness name cannot contain special characters.');
     }
 
-    const exists = await HarnessEntity.findOne({ where: { name: trimmedName } });
-    if (exists) {
+    const existsName = await HarnessEntity.findOne({ where: { name: trimmedName } });
+    if (existsName) {
       throw new BadRequestException('A harness with this name already exists.');
     }
 
-    // Create the custom harness
-    const harness = await HarnessEntity.create({
-      name: trimmedName,
-      isDefault: false,
-      isActive: false,
-    });
+    const existsCode = await HarnessEntity.findOne({ where: { code } });
+    if (existsCode) {
+      throw new BadRequestException('A harness with this code already exists.');
+    }
 
-    // Copy agent configurations from default harness
-    const defaultHarness = await HarnessEntity.findOne({ where: { isDefault: true }, include: [AgentConfigEntity] });
-    if (defaultHarness && defaultHarness.agents) {
-      for (const agent of defaultHarness.agents) {
+    return HarnessEntity.sequelize!.transaction(async (transaction) => {
+      // Create the custom harness
+      const harness = await HarnessEntity.create({
+        code,
+        name: trimmedName,
+        isDefault: false,
+        isActive: false,
+      }, { transaction });
+
+      // Identify the harness to clone from
+      let sourceHarness: HarnessEntity | null = null;
+      if (cloneFromHarnessId) {
+        sourceHarness = await HarnessEntity.findByPk(cloneFromHarnessId, {
+          include: [AgentConfigEntity],
+          transaction
+        });
+      } else {
+        sourceHarness = await HarnessEntity.findOne({
+          where: { isDefault: true },
+          include: [AgentConfigEntity],
+          transaction
+        });
+      }
+
+      if (!sourceHarness) {
+        throw new BadRequestException('Source harness for cloning not found.');
+      }
+
+      let agents = sourceHarness.agents || [];
+      if (agents.length === 0) {
+        const roles = ['preparer', 'planner', 'orchestrator', 'executor', 'qa', 'supervisor'];
+        for (const role of roles) {
+          const newAgent = await AgentConfigEntity.create({
+            code: `${sourceHarness.code}-${role}`,
+            harnessId: sourceHarness.id,
+            role,
+            prompt: getDefaultPromptText(role),
+            providerId: 'ollama',
+            modelName: 'gemma4:latest-oc',
+          }, { transaction });
+          agents.push(newAgent);
+        }
+      }
+
+      for (const agent of agents) {
         await AgentConfigEntity.create({
+          code: `${code}-${agent.role}`,
           harnessId: harness.id,
           role: agent.role,
           prompt: agent.prompt,
           providerId: agent.providerId,
           modelName: agent.modelName,
-        });
+        }, { transaction });
       }
-    }
 
-    return HarnessEntity.findByPk(harness.id, { include: [AgentConfigEntity] });
+      return HarnessEntity.findByPk(harness.id, {
+        include: [AgentConfigEntity],
+        transaction
+      });
+    });
   }
 
   @Get(':id')
@@ -180,6 +238,10 @@ export class HarnessController {
     agentConfig.providerId = body.providerId;
     agentConfig.modelName = body.modelName;
     await agentConfig.save();
+
+    if (harness.isActive) {
+      this.observability.cancelRequestsForHarness(id);
+    }
 
     return agentConfig;
   }

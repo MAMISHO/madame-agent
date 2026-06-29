@@ -15,22 +15,29 @@ export class HarnessEntity extends Model {
     allowNull: false,
     unique: true,
   })
-  name!: string;
+  declare code: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+    unique: true,
+  })
+  declare name: string;
 
   @Column({
     type: DataType.BOOLEAN,
     allowNull: false,
     defaultValue: false,
   })
-  isDefault!: boolean;
+  declare isDefault: boolean;
 
   @Column({
     type: DataType.BOOLEAN,
     allowNull: false,
     defaultValue: false,
   })
-  isActive!: boolean;
+  declare isActive: boolean;
 
   @HasMany(() => AgentConfigEntity)
-  agents?: AgentConfigEntity[];
+  declare agents?: AgentConfigEntity[];
 }

@@ -144,4 +144,115 @@ export class CostTrackerService implements OnModuleInit, OnModuleDestroy {
     }
     return this.sessionStats;
   }
+
+  public async getDetailedStats() {
+    const file = path.join(process.cwd(), '.madame-agent-costs.jsonl');
+    if (!fs.existsSync(file)) {
+      return [];
+    }
+
+    // 1. Get Session -> Harness mapping from DB
+    const sessionHarnessMap = new Map<string, { id: string; name: string }>();
+    try {
+      const { HarnessEntity } = require('../core/infra/database/entities/harness.entity');
+      const { ExecutionLogEntity } = require('../core/infra/database/entities/execution-log.entity');
+      
+      const logs = await ExecutionLogEntity.findAll({
+        attributes: ['sessionId', 'harnessId'],
+        group: ['sessionId', 'harnessId'],
+        include: [{ model: HarnessEntity, attributes: ['name'] }],
+      });
+
+      for (const log of logs) {
+        sessionHarnessMap.set(log.sessionId, {
+          id: log.harnessId,
+          name: log.harness?.name || 'Unknown Harness',
+        });
+      }
+    } catch (e) {
+      // ignore db errors
+    }
+
+    const content = fs.readFileSync(file, 'utf8');
+    const lines = content.split('\n').filter(Boolean);
+    const entries: CostEntry[] = lines.map(l => JSON.parse(l));
+
+    // Grouping structure: Session -> Harness -> Agent -> Model
+    const sessions = new Map<string, any>();
+
+    for (const entry of entries) {
+      const sId = entry.sessionId || 'default-session';
+      const harnessInfo = sessionHarnessMap.get(sId) || { id: 'default', name: 'Default Harness' };
+      
+      if (!sessions.has(sId)) {
+        sessions.set(sId, {
+          sessionId: sId,
+          totalCloudUsd: 0,
+          totalSavedUsd: 0,
+          harnesses: new Map<string, any>(),
+        });
+      }
+
+      const sessionObj = sessions.get(sId);
+      sessionObj.totalCloudUsd += entry.costUsd;
+      sessionObj.totalSavedUsd += entry.savedCostUsd;
+
+      const hName = harnessInfo.name;
+      if (!sessionObj.harnesses.has(hName)) {
+        sessionObj.harnesses.set(hName, {
+          harnessName: hName,
+          totalCloudUsd: 0,
+          totalSavedUsd: 0,
+          agents: new Map<string, any>(),
+        });
+      }
+
+      const harnessObj = sessionObj.harnesses.get(hName);
+      harnessObj.totalCloudUsd += entry.costUsd;
+      harnessObj.totalSavedUsd += entry.savedCostUsd;
+
+      const agentRole = entry.mode || 'system';
+      if (!harnessObj.agents.has(agentRole)) {
+        harnessObj.agents.set(agentRole, {
+          role: agentRole,
+          totalCloudUsd: 0,
+          totalSavedUsd: 0,
+          models: new Map<string, any>(),
+        });
+      }
+
+      const agentObj = harnessObj.agents.get(agentRole);
+      agentObj.totalCloudUsd += entry.costUsd;
+      agentObj.totalSavedUsd += entry.savedCostUsd;
+
+      const modelName = entry.model || 'unknown';
+      if (!agentObj.models.has(modelName)) {
+        agentObj.models.set(modelName, {
+          model: modelName,
+          totalCloudUsd: 0,
+          totalSavedUsd: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+        });
+      }
+
+      const modelObj = agentObj.models.get(modelName);
+      modelObj.totalCloudUsd += entry.costUsd;
+      modelObj.totalSavedUsd += entry.savedCostUsd;
+      modelObj.inputTokens += entry.inputTokens;
+      modelObj.outputTokens += entry.outputTokens;
+    }
+
+    // Convert Maps to nested Arrays for JSON transmission
+    return Array.from(sessions.values()).map(s => ({
+      ...s,
+      harnesses: Array.from(s.harnesses.values()).map((h: any) => ({
+        ...h,
+        agents: Array.from(h.agents.values()).map((a: any) => ({
+          ...a,
+          models: Array.from(a.models.values()),
+        })),
+      })),
+    }));
+  }
 }

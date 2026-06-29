@@ -19,7 +19,7 @@ import configuration from './config/configuration';
     DatabaseModule,
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'frontend', 'dist', 'frontend', 'browser'),
-      exclude: ['/v1*'],
+      exclude: ['/v1/(.*)', '/v1'],
     }),
     ConfigModule.forRoot({
       isGlobal: true,

@@ -717,10 +717,14 @@ ${scraped.content}
     pair: { id: string; name: string; orchestrator: string; subagents: string[] },
   ): Promise<void> {
     // Check if any subagent in this pair uses Ollama
-    const usesOllama = pair.subagents.some((subagentId) => {
-      const localCfg = this.modelResolverService.getLocalConfig(subagentId);
-      return localCfg && localCfg.type === 'ollama';
-    });
+    let usesOllama = false;
+    for (const subagentId of pair.subagents) {
+      const localCfg = await this.modelResolverService.getLocalConfig(subagentId);
+      if (localCfg && localCfg.type === 'ollama') {
+        usesOllama = true;
+        break;
+      }
+    }
 
     if (!usesOllama) {
       this.agentLogger.log('System', 'No Ollama subagents in this pair, skipping lifecycle check.', parentRequestId);

@@ -1,0 +1,84 @@
+<section class="mochi-panel" style="width: 320px;">
+  <div class="mochi-panel-header">
+    <h2>Harness List</h2>
+  </div>
+  <div class="mochi-panel-content" style="padding-top: 0;">
+    <!-- Add New Harness Button -->
+    <div style="margin-bottom: 20px;">
+      <button (click)="openModal()" class="mochi-action-btn" style="width: 100%; padding: 10px; border-radius: 8px;">
+        + Create Custom Harness
+      </button>
+    </div>
+
+    @if (showModal) {
+      <div class="modal-overlay" style="position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+        <div class="modal-content" style="background: #1a1a1e; border: 1px solid #3f3f46; border-radius: 16px; padding: 24px; width: 400px; display: flex; flex-direction: column; gap: 16px;">
+          <h3 style="margin: 0; color: white;">Create Custom Harness</h3>
+          
+          <div class="form-group">
+            <label style="font-size: 11px; color: #a1a1aa;">Harness Code (No spaces or special chars)</label>
+            <input type="text" [value]="newCode" (input)="newCode = $any($event.target).value" [disabled]="isSaving" placeholder="e.g. smart-dev" class="mochi-input text-input">
+          </div>
+
+          <div class="form-group">
+            <label style="font-size: 11px; color: #a1a1aa;">Harness Name</label>
+            <input type="text" [value]="newName" (input)="newName = $any($event.target).value" [disabled]="isSaving" placeholder="e.g. Smart Dev Router" class="mochi-input text-input">
+          </div>
+
+          <div class="form-group">
+            <label style="font-size: 11px; color: #a1a1aa;">Clone Configuration From</label>
+            <select [value]="cloneFromId" (change)="cloneFromId = $any($event.target).value" [disabled]="isSaving" class="mochi-input select-input">
+              @for (dh of defaultHarnesses; track dh.id) {
+                <option [value]="dh.id">{{ dh.name }}</option>
+              }
+            </select>
+          </div>
+
+          <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
+            <button (click)="closeModal()" [disabled]="isSaving" class="harness-btn activate-btn" style="padding: 8px 16px;">Cancel</button>
+            <button (click)="onSave()" [disabled]="isSaving" class="mochi-action-btn" style="padding: 8px 24px; display: flex; align-items: center; gap: 8px;">
+              @if (isSaving) {
+                <span class="spinner" style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; display: inline-block; animation: spin 1s linear infinite;"></span>
+              }
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+      <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+      </style>
+    }
+
+    <!-- List harnesses -->
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      @if (isLoading) {
+        <div class="mochi-skeleton mochi-skeleton-list-item"></div>
+        <div class="mochi-skeleton mochi-skeleton-list-item"></div>
+        <div class="mochi-skeleton mochi-skeleton-list-item"></div>
+      } @else {
+        @for (h of harnesses; track h.id) {
+          <div class="harness-item-card" [class.selected]="selectedHarness?.id === h.id">
+            <div class="harness-meta" (click)="selectHarness.emit(h)">
+              <span class="harness-name">{{ h.name }}</span>
+              @if (h.isDefault) {
+                <span class="badge default-badge">DEFAULT</span>
+              }
+              @if (h.isActive) {
+                <span class="badge active-badge">ACTIVE</span>
+              }
+            </div>
+            <div class="harness-actions">
+              @if (!h.isActive) {
+                <button (click)="activateHarness.emit(h); $event.stopPropagation()" class="harness-btn activate-btn">Activate</button>
+              }
+              @if (!h.isDefault) {
+                <button (click)="deleteHarness.emit(h); $event.stopPropagation()" class="harness-btn delete-btn">Delete</button>
+              }
+            </div>
+          </div>
+        }
+      }
+    </div>
+  </div>
+</section>
