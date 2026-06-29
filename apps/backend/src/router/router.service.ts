@@ -69,7 +69,7 @@ export class RouterService implements OnModuleInit {
         } else {
           // Resolve subagents from active orchestrator pair if possible
           const requestModel = context?.request?.model;
-          const pair = requestModel ? this.modelResolverService.getOrchestratorPair(requestModel) : null;
+          const pair = requestModel ? await this.modelResolverService.getOrchestratorPair(requestModel) : null;
           if (pair && pair.subagents) {
             subagentsToTry = [...pair.subagents];
           } else {
@@ -185,7 +185,7 @@ export class RouterService implements OnModuleInit {
           this.logger.warn(`[Orchestrator ${parentRequestId}] All candidate subagents failed. Falling back to isolated self-assignment.`);
           
           const requestModel = context && (context as any).request?.model;
-          const pair = requestModel ? this.modelResolverService.getOrchestratorPair(requestModel) : null;
+          const pair = requestModel ? await this.modelResolverService.getOrchestratorPair(requestModel) : null;
           const orchestratorModelKey = pair ? pair.orchestrator : (requestModel || 'cloud_nvidia');
           
           const selfRequestId = `self_${randomUUID().slice(0, 8)}`;
@@ -371,7 +371,7 @@ export class RouterService implements OnModuleInit {
 
     // 0. Orchestrator routing: if model matches a named orchestrator pair
     if (request.model) {
-      const orchestratorPair = this.modelResolverService.getOrchestratorPair(request.model);
+      const orchestratorPair = await this.modelResolverService.getOrchestratorPair(request.model);
       if (orchestratorPair) {
         return this.routeThroughOrchestrator(request, providersConfig, orchestratorPair);
       }

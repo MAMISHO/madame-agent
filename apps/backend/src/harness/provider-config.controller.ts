@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
-import { ProviderConfigEntity } from '../core/infra/database/entities/provider-config.entity';
-import { AgentConfigEntity } from '../core/infra/database/entities/agent-config.entity';
+import { ProviderEntity } from '../core/infra/database/entities/provider.entity';
+import { ModelEntity } from '../core/infra/database/entities/model.entity';
 import { ScalableModelEntity } from '../core/infra/database/entities/scalable-model.entity';
 import { RepositoryValidator } from '../core/application/services/repository-validator.service';
 
@@ -34,7 +34,7 @@ export class ProviderConfigController {
 
   @Get()
   async listAll() {
-    const providers = await ProviderConfigEntity.findAll();
+    const providers = await ProviderEntity.findAll();
     return providers.map((p) => ({
       id: p.id,
       code: p.code,
@@ -53,7 +53,7 @@ export class ProviderConfigController {
 
     this.validator.validateCode(code);
 
-    const existing = await ProviderConfigEntity.findOne({ where: { code } });
+    const existing = await ProviderEntity.findOne({ where: { code } });
     if (existing) {
       throw new BadRequestException(`Provider with code "${code}" already exists.`);
     }
@@ -62,7 +62,7 @@ export class ProviderConfigController {
       await this.validateConnectivity(code, baseUrl);
     }
 
-    const provider = await ProviderConfigEntity.create({ code, name, apiKey, baseUrl });
+    const provider = await ProviderEntity.create({ code, name, apiKey, baseUrl });
     return {
       id: provider.id,
       code: provider.code,
@@ -74,7 +74,7 @@ export class ProviderConfigController {
 
   @Put(':id')
   async update(@Param('id') id: string, @Body() body: { name?: string; apiKey?: string; baseUrl?: string }) {
-    const provider = await ProviderConfigEntity.findByPk(id);
+    const provider = await ProviderEntity.findByPk(id);
     if (!provider) {
       throw new NotFoundException(`Provider "${id}" not found.`);
     }
@@ -99,16 +99,16 @@ export class ProviderConfigController {
 
   @Delete(':id')
   async remove(@Param('id') id: string) {
-    const provider = await ProviderConfigEntity.findByPk(id);
+    const provider = await ProviderEntity.findByPk(id);
     if (!provider) {
       throw new NotFoundException(`Provider "${id}" not found.`);
     }
 
     // Check Relational Integrity
-    const agentsUsingIt = await AgentConfigEntity.findAll({ where: { providerId: id } });
-    if (agentsUsingIt.length > 0) {
-      const agentCodes = agentsUsingIt.map(a => a.code).join(', ');
-      throw new ConflictException(`Cannot delete provider because it is used by agents: ${agentCodes}`);
+    const modelsUsingIt = await ModelEntity.findAll({ where: { providerId: id } });
+    if (modelsUsingIt.length > 0) {
+      const modelCodes = modelsUsingIt.map(m => m.code).join(', ');
+      throw new ConflictException(`Cannot delete provider because it is used by models: ${modelCodes}`);
     }
 
     const localModelsUsingIt = await ScalableModelEntity.findAll({ where: { localProviderId: id } });

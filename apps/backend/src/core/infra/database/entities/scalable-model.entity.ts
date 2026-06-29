@@ -1,5 +1,5 @@
 import { Column, DataType, Model, Table, ForeignKey, BelongsTo } from 'sequelize-typescript';
-import { ProviderConfigEntity } from './provider-config.entity';
+import { ProviderEntity } from './provider.entity';
 
 @Table({ tableName: 'scalable_models', timestamps: true })
 export class ScalableModelEntity extends Model {
@@ -23,7 +23,7 @@ export class ScalableModelEntity extends Model {
   })
   declare name: string;
 
-  @ForeignKey(() => ProviderConfigEntity)
+  @ForeignKey(() => ProviderEntity)
   @Column({
     type: DataType.UUID,
     allowNull: false,
@@ -36,7 +36,7 @@ export class ScalableModelEntity extends Model {
   })
   declare localModelName: string;
 
-  @ForeignKey(() => ProviderConfigEntity)
+  @ForeignKey(() => ProviderEntity)
   @Column({
     type: DataType.UUID,
     allowNull: false,
@@ -49,9 +49,9 @@ export class ScalableModelEntity extends Model {
   })
   declare cloudModelName: string;
 
-  @BelongsTo(() => ProviderConfigEntity, 'localProviderId')
-  declare localProvider?: ProviderConfigEntity;
+  @BelongsTo(() => ProviderEntity, 'localProviderId')
+  declare localProvider?: ProviderEntity;
 
-  @BelongsTo(() => ProviderConfigEntity, 'cloudProviderId')
-  declare cloudProvider?: ProviderConfigEntity;
+  @BelongsTo(() => ProviderEntity, 'cloudProviderId')
+  declare cloudProvider?: ProviderEntity;
 }

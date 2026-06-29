@@ -1,16 +1,22 @@
 import { Sequelize } from "sequelize-typescript";
 import { HarnessEntity } from "./entities/harness.entity";
-import { AgentConfigEntity } from "./entities/agent-config.entity";
-import { ProviderConfigEntity } from "./entities/provider-config.entity";
+import { AgentEntity } from "./entities/agent.entity";
+import { ProviderEntity } from "./entities/provider.entity";
+import { ModelEntity } from "./entities/model.entity";
+import { EdgeEntity } from "./entities/edge.entity";
 import { ExecutionLogEntity } from "./entities/execution-log.entity";
 import { ScalableModelEntity } from "./entities/scalable-model.entity";
 import { join, resolve } from "path";
 import { readFileSync, existsSync } from "fs";
 import * as yaml from 'js-yaml';
 
+const storagePath = process.cwd().endsWith('apps/backend')
+  ? join(process.cwd(), 'madame-agent.sqlite')
+  : join(process.cwd(), 'apps/backend/madame-agent.sqlite');
+
 export const sequelize = new Sequelize({
   dialect: "sqlite",
-  storage: join(process.cwd(), "apps/backend/madame-agent.sqlite"),
+  storage: storagePath,
   logging: false,
 });
 
@@ -53,8 +59,10 @@ export class DataBaseProviderFactory {
       console.log("SQLite database connected successfully.");
       sequelize.addModels([
         HarnessEntity,
-        AgentConfigEntity,
-        ProviderConfigEntity,
+        AgentEntity,
+        ProviderEntity,
+        ModelEntity,
+        EdgeEntity,
         ExecutionLogEntity,
         ScalableModelEntity,
       ]);
@@ -68,7 +76,7 @@ export class DataBaseProviderFactory {
         function resolveModelAndProvider(
           target: string,
           yamlData: any
-        ): { providerId: string; modelName: string } {
+        ): { providerCode: string; modelCode: string } {
           const providers = yamlData.providers || {};
           const modelPairs = yamlData.model_pairs || [];
 
@@ -79,41 +87,41 @@ export class DataBaseProviderFactory {
               (p.name && p.name.toLowerCase().replace(/\s+/g, '') === target.toLowerCase().replace(/\s+/g, ''))
             );
             if (pair) {
-              return { providerId: 'madame-duo', modelName: pair.id };
+              return { providerCode: 'madame-duo', modelCode: pair.id };
             }
-            return { providerId: 'madame-duo', modelName: target };
+            return { providerCode: 'madame-duo', modelCode: target };
           }
 
           if (providers[target]) {
             const config = providers[target];
             const type = config.type || 'ollama';
-            let providerId = 'ollama';
+            let providerCode = 'ollama';
             if (type === 'cloud') {
               const prov = (config.provider || '').toLowerCase();
-              if (prov.includes('google') || prov.includes('gemini')) providerId = 'gemini';
-              else if (prov.includes('openai')) providerId = 'openai';
-              else if (prov.includes('anthropic')) providerId = 'anthropic';
-              else providerId = prov || 'cloud';
+              if (prov.includes('google') || prov.includes('gemini')) providerCode = 'gemini';
+              else if (prov.includes('openai')) providerCode = 'openai';
+              else if (prov.includes('anthropic')) providerCode = 'anthropic';
+              else providerCode = prov || 'cloud';
             }
-            return { providerId, modelName: config.model || target };
+            return { providerCode, modelCode: config.model || target };
           }
 
           for (const [key, config] of Object.entries(providers) as any[]) {
             if (config.model === target) {
               const type = config.type || 'ollama';
-              let providerId = 'ollama';
+              let providerCode = 'ollama';
               if (type === 'cloud') {
                 const prov = (config.provider || '').toLowerCase();
-                if (prov.includes('google') || prov.includes('gemini')) providerId = 'gemini';
-                else if (prov.includes('openai')) providerId = 'openai';
-                else if (prov.includes('anthropic')) providerId = 'anthropic';
-                else providerId = prov || 'cloud';
+                if (prov.includes('google') || prov.includes('gemini')) providerCode = 'gemini';
+                else if (prov.includes('openai')) providerCode = 'openai';
+                else if (prov.includes('anthropic')) providerCode = 'anthropic';
+                else providerCode = prov || 'cloud';
               }
-              return { providerId, modelName: target };
+              return { providerCode, modelCode: target };
             }
           }
 
-          return { providerId: 'ollama', modelName: target };
+          return { providerCode: 'ollama', modelCode: target };
         }
 
         let yamlData: any = {};
@@ -165,13 +173,32 @@ export class DataBaseProviderFactory {
 
             const resolved = resolveModelAndProvider(targetModelOrProvider, yamlData);
 
-            await AgentConfigEntity.create({
+            // Ensure Provider exists
+            let provider = await ProviderEntity.findOne({ where: { code: resolved.providerCode } });
+            if (!provider) {
+              provider = await ProviderEntity.create({
+                code: resolved.providerCode,
+                name: resolved.providerCode.toUpperCase(),
+              });
+            }
+
+            // Ensure Model exists
+            let model = await ModelEntity.findOne({ where: { code: resolved.modelCode } });
+            if (!model) {
+              model = await ModelEntity.create({
+                code: resolved.modelCode,
+                name: resolved.modelCode,
+                providerId: provider.id,
+              });
+            }
+
+            await AgentEntity.create({
               code: `${harnessCode}-${role}`,
+              name: `${harnessName} ${role}`,
               harnessId: dh.id,
               role,
               prompt: getDefaultPromptText(role),
-              providerId: resolved.providerId,
-              modelName: resolved.modelName,
+              modelId: model.id,
             });
           }
         }

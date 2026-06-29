@@ -1,214 +1,34 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, BadRequestException, NotFoundException } from '@nestjs/common';
-import { HarnessEntity } from '../core/infra/database/entities/harness.entity';
-import { AgentConfigEntity } from '../core/infra/database/entities/agent-config.entity';
-import { ProviderConfigEntity } from '../core/infra/database/entities/provider-config.entity';
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
-// Seed helper to return default agent prompts
-function getDefaultPromptText(role: string): string {
-  try {
-    const filenameMap: Record<string, string> = {
-      preparer: 'preparer.md',
-      planner: 'planner.md',
-      orchestrator: 'orchestrator-delegate.md',
-      executor: 'executor.md',
-      qa: 'qa.md',
-      supervisor: 'supervisor.md',
-    };
-    const file = filenameMap[role.toLowerCase()];
-    if (!file) return '';
-    const filePath = join(__dirname, '../prompts/templates', file);
-    return readFileSync(filePath, 'utf8').trim();
-  } catch {
-    return `Default system instructions for ${role}`;
-  }
-}
-
-import { RepositoryValidator } from '../core/application/services/repository-validator.service';
-import { ObservabilityService } from '../observability/observability.service';
+import { Controller, Get, Post, Body, Param, Put, Delete, BadRequestException } from '@nestjs/common';
+import { HarnessService } from './harness.service';
+import { CreateHarnessDto, UpdateHarnessDto, HarnessDto } from './application/dtos/harness.dto';
 
 @Controller('v1/harness')
 export class HarnessController {
-  constructor(
-    private readonly validator: RepositoryValidator,
-    private readonly observability: ObservabilityService,
-  ) {}
+  constructor(private readonly harnessService: HarnessService) {}
 
   @Get()
-  async listAll() {
-    // Seed default harness if database is empty
-    let defaultHarness = await HarnessEntity.findOne({ where: { isDefault: true } });
-    if (!defaultHarness) {
-      defaultHarness = await HarnessEntity.create({
-        code: 'default-harness',
-        name: 'Default Harness',
-        isDefault: true,
-        isActive: true,
-      });
-      // Seed default agent configurations
-      const roles = ['preparer', 'planner', 'orchestrator', 'executor', 'qa', 'supervisor'];
-      for (const role of roles) {
-        await AgentConfigEntity.create({
-          code: `default-harness-${role}`,
-          harnessId: defaultHarness.id,
-          role,
-          prompt: getDefaultPromptText(role),
-          providerId: 'ollama',
-          modelName: 'gemma4:latest-oc',
-        });
-      }
-    }
-
-    return HarnessEntity.findAll({ include: [AgentConfigEntity] });
+  async listAll(): Promise<HarnessDto[]> {
+    return this.harnessService.listAll();
   }
 
   @Post()
-  async create(@Body() body: { code: string; name: string; cloneFromHarnessId?: string }) {
-    const { code, name, cloneFromHarnessId } = body;
-    
-    if (!code) {
-      throw new BadRequestException('Harness code is required.');
-    }
-    this.validator.validateCode(code);
-
-    if (!name) {
-      throw new BadRequestException('Harness name is required.');
-    }
-
-    const trimmedName = name.trim();
-
-    // Validations: min 8, max 50 characters, no spaces, no special characters
-    if (trimmedName.length < 8 || trimmedName.length > 50) {
-      throw new BadRequestException('Harness name must be between 8 and 50 characters.');
-    }
-
-    const nameRegex = /^[a-zA-Z0-9_\-\s]+$/;
-    if (!nameRegex.test(trimmedName)) {
-      throw new BadRequestException('Harness name cannot contain special characters.');
-    }
-
-    const existsName = await HarnessEntity.findOne({ where: { name: trimmedName } });
-    if (existsName) {
-      throw new BadRequestException('A harness with this name already exists.');
-    }
-
-    const existsCode = await HarnessEntity.findOne({ where: { code } });
-    if (existsCode) {
-      throw new BadRequestException('A harness with this code already exists.');
-    }
-
-    return HarnessEntity.sequelize!.transaction(async (transaction) => {
-      // Create the custom harness
-      const harness = await HarnessEntity.create({
-        code,
-        name: trimmedName,
-        isDefault: false,
-        isActive: false,
-      }, { transaction });
-
-      // Identify the harness to clone from
-      let sourceHarness: HarnessEntity | null = null;
-      if (cloneFromHarnessId) {
-        sourceHarness = await HarnessEntity.findByPk(cloneFromHarnessId, {
-          include: [AgentConfigEntity],
-          transaction
-        });
-      } else {
-        sourceHarness = await HarnessEntity.findOne({
-          where: { isDefault: true },
-          include: [AgentConfigEntity],
-          transaction
-        });
-      }
-
-      if (!sourceHarness) {
-        throw new BadRequestException('Source harness for cloning not found.');
-      }
-
-      let agents = sourceHarness.agents || [];
-      if (agents.length === 0) {
-        const roles = ['preparer', 'planner', 'orchestrator', 'executor', 'qa', 'supervisor'];
-        for (const role of roles) {
-          const newAgent = await AgentConfigEntity.create({
-            code: `${sourceHarness.code}-${role}`,
-            harnessId: sourceHarness.id,
-            role,
-            prompt: getDefaultPromptText(role),
-            providerId: 'ollama',
-            modelName: 'gemma4:latest-oc',
-          }, { transaction });
-          agents.push(newAgent);
-        }
-      }
-
-      for (const agent of agents) {
-        await AgentConfigEntity.create({
-          code: `${code}-${agent.role}`,
-          harnessId: harness.id,
-          role: agent.role,
-          prompt: agent.prompt,
-          providerId: agent.providerId,
-          modelName: agent.modelName,
-        }, { transaction });
-      }
-
-      return HarnessEntity.findByPk(harness.id, {
-        include: [AgentConfigEntity],
-        transaction
-      });
-    });
+  async create(@Body() body: CreateHarnessDto): Promise<HarnessDto> {
+    return this.harnessService.create(body);
   }
 
   @Get(':id')
-  async getOne(@Param('id') id: string) {
-    const harness = await HarnessEntity.findByPk(id, { include: [AgentConfigEntity] });
-    if (!harness) {
-      throw new NotFoundException('Harness not found.');
-    }
-    return harness;
+  async getOne(@Param('id') id: string): Promise<HarnessDto> {
+    return this.harnessService.getOne(id);
   }
 
   @Put(':id/active')
   async setActive(@Param('id') id: string) {
-    const harness = await HarnessEntity.findByPk(id);
-    if (!harness) {
-      throw new NotFoundException('Harness not found.');
-    }
-
-    // Set all others to inactive
-    await HarnessEntity.update({ isActive: false }, { where: {} });
-
-    // Set this one to active
-    harness.isActive = true;
-    await harness.save();
-
-    return { message: `Harness "${harness.name}" is now active.`, activeId: harness.id };
+    return this.harnessService.setActive(id);
   }
 
   @Delete(':id')
   async delete(@Param('id') id: string) {
-    const harness = await HarnessEntity.findByPk(id);
-    if (!harness) {
-      throw new NotFoundException('Harness not found.');
-    }
-
-    if (harness.isDefault) {
-      throw new BadRequestException('The default harness cannot be deleted.');
-    }
-
-    const wasActive = harness.isActive;
-
-    // Delete associated agent configs and harness
-    await AgentConfigEntity.destroy({ where: { harnessId: id } });
-    await harness.destroy();
-
-    // Fallback active to default if the deleted harness was active
-    if (wasActive) {
-      await HarnessEntity.update({ isActive: true }, { where: { isDefault: true } });
-    }
-
-    return { message: 'Harness deleted successfully.' };
+    return this.harnessService.delete(id);
   }
 
   @Put(':id/agents/:role')
@@ -217,32 +37,18 @@ export class HarnessController {
     @Param('role') role: string,
     @Body() body: { prompt: string; providerId: string; modelName: string }
   ) {
-    const harness = await HarnessEntity.findByPk(id);
-    if (!harness) {
-      throw new NotFoundException('Harness not found.');
+    if (!body.prompt || !body.providerId || !body.modelName) {
+      throw new BadRequestException('Prompt, providerId and modelName are required');
     }
+    return this.harnessService.updateAgent(id, role, body.prompt, body.providerId, body.modelName);
+  }
 
-    if (harness.isDefault) {
-      throw new BadRequestException('The default harness configurations cannot be modified.');
-    }
-
-    const agentConfig = await AgentConfigEntity.findOne({
-      where: { harnessId: id, role: role.toLowerCase() },
-    });
-
-    if (!agentConfig) {
-      throw new NotFoundException(`Agent configuration for role "${role}" not found in this harness.`);
-    }
-
-    agentConfig.prompt = body.prompt;
-    agentConfig.providerId = body.providerId;
-    agentConfig.modelName = body.modelName;
-    await agentConfig.save();
-
-    if (harness.isActive) {
-      this.observability.cancelRequestsForHarness(id);
-    }
-
-    return agentConfig;
+  @Get(':id/agents/:role')
+  async getAgent(
+    @Param('id') id: string,
+    @Param('role') role: string
+  ) {
+    return this.harnessService.getAgent(id, role);
   }
 }
+

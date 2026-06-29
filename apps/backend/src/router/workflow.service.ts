@@ -66,12 +66,12 @@ export class WorkflowService {
 
   async executeWorkflow(
     request: ChatCompletionRequest,
-    pair: { id: string; name: string; orchestrator: string; subagents: string[] },
+    pair: any,
   ): Promise<any> {
     const parentRequestId = request.requestId || `req_${randomUUID().slice(0, 8)}`;
     request.requestId = parentRequestId;
-    const harnessName = request.metadata?.harness;
-    const strategy = this.harnessService.getStrategy(harnessName);
+    const clientStrategyName = request.metadata?.clientStrategy || request.metadata?.harness;
+    const strategy = this.harnessService.getStrategy(clientStrategyName);
 
     const parsed = strategy.parseRequest(request.messages);
     let userMessage = parsed.userMessage;
@@ -86,10 +86,10 @@ export class WorkflowService {
 
     this.agentLogger.log('System', `Executing multi-agent workflow for request: "${userMessage.slice(0, 100)}..."`, parentRequestId);
 
-    const providersConfig = this.configService.get('providers') || {};
-    const orchestratorConfig = providersConfig[pair.orchestrator];
+    const resolvedOrch = await this.modelResolverService.resolveModel(pair.orchestrator);
+    const orchestratorConfig = resolvedOrch.config;
     if (!orchestratorConfig) {
-      throw new Error(`Orchestrator provider "${pair.orchestrator}" not found for pair "${pair.name}"`);
+      throw new Error(`Orchestrator provider "${pair.orchestrator}" not found`);
     }
 
     const sessionId = request.metadata?.sessionId || 'default-session';
@@ -112,12 +112,14 @@ export class WorkflowService {
       // 1.5. Ollama Lifecycle Check (deterministic, not LLM-dependent)
       await this.ensureOllamaReady(parentRequestId, request, pair);
 
-      // 2. Environment Preparer Agent (Cloud) - Only run if state is NEW
+      // 2. Environment Preparer Agent - Only run if state is NEW
       if (session.state === 'NEW') {
         this.agentLogger.log('Preparer', 'Verifying environment and configuring context...', parentRequestId);
-        const preparerPrompt = await this.promptService.loadPrompt('preparer');
+        const preparerPrompt = await this.promptService.loadPrompt('preparer', {}, pair.id);
+        const resolvedPrep = await this.modelResolverService.resolveModel(pair.preparer || pair.orchestrator);
+        const preparerConfig = resolvedPrep.config;
         const preparerRequest: ChatCompletionRequest = {
-          model: pair.orchestrator,
+          model: resolvedPrep.providerKey,
           metadata: request.metadata,
           messages: [
             { role: 'system', content: preparerPrompt },
@@ -129,7 +131,7 @@ export class WorkflowService {
         };
         const preparerResult = await this.toolLoop.execute(
           preparerRequest,
-          orchestratorConfig,
+          preparerConfig,
           undefined,
           {
             parentRequestId,
@@ -149,16 +151,18 @@ export class WorkflowService {
       // Check if we need to re-run the Planner (Feedback case)
       const isFeedback = session.state !== 'NEW' && session.state !== 'PREPARED' && !this.isConfirmationMessage(userMessage);
 
-      // 3. Planner Agent (Cloud) - Run on PREPARED or if user sends Feedback
+      // 3. Planner Agent - Run on PREPARED or if user sends Feedback
       if (session.state === 'PREPARED' || isFeedback) {
         this.agentLogger.log('Planner', isFeedback ? 'Re-evaluating plan based on feedback...' : 'Generating technical implementation plan...', parentRequestId);
-        const plannerPrompt = await this.promptService.loadPrompt('planner');
+        const plannerPrompt = await this.promptService.loadPrompt('planner', {}, pair.id);
+        const resolvedPlan = await this.modelResolverService.resolveModel(pair.planner || pair.orchestrator);
+        const plannerConfig = resolvedPlan.config;
         const plannerUserContent = isFeedback
           ? `Original Task: ${session.originalTask}\n\nEnvironment Report:\n${preparerText}\n\nPrevious Plan:\n${planText}\n\nNew User Feedback:\n${userMessage}`
           : `Task: ${session.originalTask}\n\nEnvironment Report:\n${preparerText}`;
 
         const plannerRequest: ChatCompletionRequest = {
-          model: pair.orchestrator,
+          model: resolvedPlan.providerKey,
           metadata: request.metadata,
           messages: [
             { role: 'system', content: plannerPrompt },
@@ -167,7 +171,7 @@ export class WorkflowService {
           requestId: `plan_${randomUUID().slice(0, 8)}`,
           parentRequestId,
         };
-        const plannerResponse = await this.providersService.getProvider(orchestratorConfig.type).chat(plannerRequest, orchestratorConfig);
+        const plannerResponse = await this.providersService.getProvider(plannerConfig.type).chat(plannerRequest, plannerConfig);
         planText = plannerResponse.data?.choices?.[0]?.message?.content || 'No plan generated';
         
         session = this.sessionManager.updateSession(sessionId, {
@@ -184,7 +188,7 @@ export class WorkflowService {
       this.agentLogger.log('Orchestrator', 'Orchestration loop started.', parentRequestId);
       
       // System instructions for outer Orchestrator
-      const orchestratorPrompt = await this.promptService.loadPrompt('orchestrator-delegate');
+      const orchestratorPrompt = await this.promptService.loadPrompt('orchestrator-delegate', {}, pair.id);
       
       // Construct token-optimized compacted user message
       const userPromptContent = `Original Task: ${session.originalTask}
@@ -209,7 +213,7 @@ ${userMessage}`;
       const searchSkills = this.toolRegistry.getDefinitions().find(t => t.function.name === 'search_skills');
       
       const orchestratorRequest: ChatCompletionRequest = {
-        model: pair.orchestrator,
+        model: resolvedOrch.providerKey,
         metadata: request.metadata,
         messages: enrichedMessages,
         tools: [
@@ -321,12 +325,10 @@ ${userMessage}`;
 
   private registerCustomDelegationTool(
     metadata: any,
-    pair: { id: string; name: string; orchestrator: string; subagents: string[] },
+    pair: any,
     parentRequestId: string,
     getPreparerText: () => string
   ) {
-    const providersConfig = this.configService.get('providers') || {};
-    const orchestratorConfig = providersConfig[pair.orchestrator];
     this.toolRegistry.register({
       definition: this.getDelegationToolDefinition(pair.subagents),
       execute: async (
@@ -345,15 +347,14 @@ ${userMessage}`;
         }
 
         const rawExecutorModel = subagentsToTry[0] || 'local_medium';
-        const resolved = await this.modelResolverService.resolveModel(rawExecutorModel, args.task);
+        const resolved = await this.modelResolverService.resolveModel((pair as any).executor || rawExecutorModel, args.task);
         const executorConfig = resolved.config;
         const executorKey = resolved.providerKey;
         let executorModel = executorConfig.model;
 
-        // Get QA model (use the same executorKey to reuse model memory and avoid loading timeouts)
-        const providersConfig = this.configService.get('providers') || {};
-        const qaModel = executorKey;
-        const qaConfig = providersConfig[qaModel];
+        // Get QA model dynamically
+        const resolvedQa = await this.modelResolverService.resolveModel((pair as any).qa || executorKey);
+        const qaConfig = resolvedQa.config;
 
         let finalResultContent: string | null = null;
         const telemetryHistory: TelemetryEntry[] = [];
@@ -373,8 +374,8 @@ ${userMessage}`;
             this.agentLogger.log('Executor', `Iteration ${iteration}/${maxSubIterations} starting...`, subagentRequestId);
 
             // 1. Build Executor Prompt
-            const basePrompt = await this.promptService.loadPrompt('subagent-base');
-            let executorSystemContent = basePrompt + '\n\n' + (await this.promptService.loadPrompt('executor'));
+            const basePrompt = await this.promptService.loadPrompt('subagent-base', {}, pair.id);
+            let executorSystemContent = basePrompt + '\n\n' + (await this.promptService.loadPrompt('executor', {}, pair.id));
             if (supervisorOverride) {
               executorSystemContent += `\n\n=== CRITICAL SUPERVISOR OVERRIDE ===\nThe Transversal Supervisor has issued a mandatory override instruction. You MUST obey this override immediately and prioritize it over other rules.\nOverride Instruction: ${supervisorOverride}\n\n`;
             }
@@ -501,9 +502,9 @@ ${userMessage}`;
               }
             }
 
-            const qaSystemPrompt = basePrompt + '\n\n' + (await this.promptService.loadPrompt('qa'));
+            const qaSystemPrompt = basePrompt + '\n\n' + (await this.promptService.loadPrompt('qa', {}, pair.id));
             const qaRequest: ChatCompletionRequest = {
-              model: qaModel,
+              model: (pair as any).qa || executorKey,
               metadata,
               messages: [
                 { role: 'system', content: qaSystemPrompt },
@@ -558,10 +559,13 @@ ${userMessage}`;
 
             // 3. Transversal Supervisor Agent (Cloud) - Parallel loop detection & override injection
             this.agentLogger.log('Supervisor', 'Evaluating telemetry for loops and desyncs...', subagentRequestId);
-            const supervisorSystemPrompt = await this.promptService.loadPrompt('supervisor');
+            const supervisorSystemPrompt = await this.promptService.loadPrompt('supervisor', {}, pair.id);
             
+            const resolvedSup = await this.modelResolverService.resolveModel((pair as any).supervisor || pair.orchestrator);
+            const supervisorConfig = resolvedSup.config;
+
             const supervisorRequest: ChatCompletionRequest = {
-              model: pair.orchestrator, // Cloud model
+              model: resolvedSup.providerKey, // Cloud model
               metadata,
               messages: [
                 { role: 'system', content: supervisorSystemPrompt },
@@ -574,7 +578,7 @@ ${userMessage}`;
               parentRequestId: parentRequestId,
             };
 
-            const supervisorResponse = await this.providersService.getProvider(orchestratorConfig.type).chat(supervisorRequest, orchestratorConfig);
+            const supervisorResponse = await this.providersService.getProvider(supervisorConfig.type).chat(supervisorRequest, supervisorConfig);
             const supervisorOutput = supervisorResponse.data?.choices?.[0]?.message?.content || '';
 
             this.agentLogger.log('Supervisor', `Analysis:\n${supervisorOutput}`, subagentRequestId);
@@ -716,6 +720,13 @@ ${scraped.content}
     request: ChatCompletionRequest,
     pair: { id: string; name: string; orchestrator: string; subagents: string[] },
   ): Promise<void> {
+    // If we are in plan mode, we don't need Ollama subagents yet
+    const isPlanMode = request.metadata?.opencodeAgent === 'plan';
+    if (isPlanMode) {
+      this.agentLogger.log('System', 'Workflow is in planning mode (agent: plan). Skipping Ollama lifecycle check.', parentRequestId);
+      return;
+    }
+
     // Check if any subagent in this pair uses Ollama
     let usesOllama = false;
     for (const subagentId of pair.subagents) {

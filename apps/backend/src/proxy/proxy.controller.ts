@@ -151,13 +151,29 @@ export class ProxyController {
     const requestId = `req_${++requestCounter}`;
     body.requestId = requestId;
 
-    // Detect harness client
+    // Detect client interface strategy (opencode vs cli)
     const userAgent = req.headers['user-agent'] || '';
-    const harness =
-      body.metadata?.harness ||
+    const clientStrategy =
       req.headers['x-harness-client'] ||
       req.headers['x-client-id'] ||
-      (userAgent.toLowerCase().includes('opencode') ? 'opencode' : undefined);
+      (userAgent.toLowerCase().includes('opencode') ? 'opencode' : 'cli');
+
+    // Detect harness configuration
+    let harness = body.metadata?.harness;
+    if (!harness && body.model) {
+      let modelClean = body.model;
+      if (modelClean.startsWith('madame-orchestrator-')) {
+        modelClean = modelClean.replace('madame-orchestrator-', '');
+      }
+      const dbHarness = await HarnessEntity.findOne({ where: { code: modelClean } }) ||
+                         await HarnessEntity.findOne({ where: { name: modelClean } });
+      if (dbHarness) {
+        harness = dbHarness.code;
+      }
+    }
+    if (!harness) {
+      harness = clientStrategy;
+    }
 
     let sessionId = (body.metadata?.sessionId || req.headers['x-session-id']) as string;
     if (!sessionId) {
@@ -182,10 +198,28 @@ export class ProxyController {
       sessionId = 'default-session';
     }
 
+    // Extract agent mode from OpenCode JSON user messages
+    let opencodeAgent: string | undefined = undefined;
+    if (body.messages && body.messages.length > 0) {
+      const lastUserMsg = [...body.messages].reverse().find(m => m.role === 'user');
+      if (lastUserMsg && typeof lastUserMsg.content === 'string') {
+        try {
+          const parsed = JSON.parse(lastUserMsg.content);
+          if (parsed && typeof parsed.agent === 'string') {
+            opencodeAgent = parsed.agent;
+          }
+        } catch {
+          // Ignore, not a JSON payload or different format
+        }
+      }
+    }
+
     body.metadata = {
       ...body.metadata,
       harness: harness ? (typeof harness === 'string' ? harness : String(harness)) : undefined,
+      clientStrategy,
       sessionId,
+      opencodeAgent,
     };
 
     this.observability.startTimer(requestId);

@@ -2,17 +2,20 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners, isDevMode } from
 import { provideRouter } from '@angular/router';
 import { provideStore } from '@ngrx/store';
 import { provideEffects } from '@ngrx/effects';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 
 import { routes } from './app.routes';
 import { harnessReducer } from './features/harness/ui/store/harness.reducer';
 import { statsReducer } from './features/stats/ui/store/stats.reducer';
 import { HarnessEffects } from './features/harness/ui/store/harness.effects';
 import { StatsEffects } from './features/stats/ui/store/stats.effects';
+import { apiInterceptor } from './core/interceptors/api.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
+    provideHttpClient(withInterceptors([apiInterceptor])),
     provideStore({
       harness: harnessReducer,
       stats: statsReducer,

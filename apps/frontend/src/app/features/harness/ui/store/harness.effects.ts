@@ -22,6 +22,31 @@ export class HarnessEffects {
     )
   );
 
+  loadHarnessDetail$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(HarnessActions.loadHarnessDetail),
+      switchMap(({ id }) =>
+        this.harnessService.getHarness(id).pipe(
+          map((harness) => HarnessActions.loadHarnessDetailSuccess({ harness })),
+          catchError((error) => of(HarnessActions.loadHarnessDetailFailure({ error: error.message })))
+        )
+      )
+    )
+  );
+
+  loadActiveHarnessOnLoad$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(HarnessActions.loadHarnessesSuccess),
+      map(({ harnesses }) => {
+        const active = harnesses.find((h) => h.isActive) || harnesses[0];
+        if (active) {
+          return HarnessActions.loadHarnessDetail({ id: active.id });
+        }
+        return { type: '[Harness] No Active Harness Found' };
+      })
+    )
+  );
+
   createHarness$ = createEffect(() =>
     this.actions$.pipe(
       ofType(HarnessActions.createHarnessOptimistic),
@@ -172,6 +197,18 @@ export class HarnessEffects {
             alert(error.message);
             return of(HarnessActions.deleteScalableModelFailure({ error: error.message }));
           })
+        )
+      )
+    )
+  );
+
+  loadAgentDetail$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(HarnessActions.loadAgentDetail),
+      switchMap(({ harnessId, role }) =>
+        this.harnessService.getAgent(harnessId, role).pipe(
+          map((agent) => HarnessActions.loadAgentDetailSuccess({ agent })),
+          catchError((error) => of(HarnessActions.loadAgentDetailFailure({ error: error.message })))
         )
       )
     )

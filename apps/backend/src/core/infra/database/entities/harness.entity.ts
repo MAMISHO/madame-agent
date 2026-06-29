@@ -1,5 +1,6 @@
 import { Column, DataType, Model, Table, HasMany } from 'sequelize-typescript';
-import { AgentConfigEntity } from './agent-config.entity';
+import { AgentEntity } from './agent.entity';
+import { EdgeEntity } from './edge.entity';
 
 @Table({ tableName: 'harnesses', timestamps: true })
 export class HarnessEntity extends Model {
@@ -25,6 +26,12 @@ export class HarnessEntity extends Model {
   declare name: string;
 
   @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  declare description: string;
+
+  @Column({
     type: DataType.BOOLEAN,
     allowNull: false,
     defaultValue: false,
@@ -38,6 +45,9 @@ export class HarnessEntity extends Model {
   })
   declare isActive: boolean;
 
-  @HasMany(() => AgentConfigEntity)
-  declare agents?: AgentConfigEntity[];
+  @HasMany(() => AgentEntity)
+  declare agents?: AgentEntity[];
+
+  @HasMany(() => EdgeEntity)
+  declare edges?: EdgeEntity[];
 }

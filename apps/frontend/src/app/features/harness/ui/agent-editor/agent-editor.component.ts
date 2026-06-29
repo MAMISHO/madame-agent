@@ -32,6 +32,8 @@ export class AgentEditorComponent {
   @Input() allHarnesses: Harness[] = [];
   @Input() providers: ProviderConfig[] = [];
   @Input() scalableModels: ScalableModelConfig[] = [];
+  @Input() isLoading = false;
+  @Input() role = '';
 
   @Output() close = new EventEmitter<void>();
   @Output() save = new EventEmitter<{

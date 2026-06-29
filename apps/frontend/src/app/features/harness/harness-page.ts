@@ -3,7 +3,7 @@ import { Store } from '@ngrx/store';
 import { AsyncPipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 import * as HarnessActions from './ui/store/harness.actions';
-import { selectAllHarnesses, selectSelectedHarness, selectAllProviders, selectAllScalableModels, selectHarnessLoading } from './ui/store/harness.selectors';
+import { selectAllHarnesses, selectSelectedHarness, selectAllProviders, selectAllScalableModels, selectHarnessLoading, selectHarnessDetailLoading, selectSelectedAgentDetail, selectHarnessAgentLoading } from './ui/store/harness.selectors';
 import { Harness, AgentConfig } from './domain/harness.model';
 import { ProviderConfig } from './domain/provider.model';
 import { ScalableModelConfig } from './domain/scalable-model.model';
@@ -27,16 +27,13 @@ export class HarnessPageComponent implements OnInit, OnDestroy {
   providers$ = this.store.select(selectAllProviders);
   scalableModels$ = this.store.select(selectAllScalableModels);
   loading$ = this.store.select(selectHarnessLoading);
+  detailLoading$ = this.store.select(selectHarnessDetailLoading);
+  agentLoading$ = this.store.select(selectHarnessAgentLoading);
 
   selectedAgentRole = signal<string | null>(null);
   selectedHarness = signal<Harness | null>(null);
 
-  selectedAgent = computed(() => {
-    const role = this.selectedAgentRole();
-    const harness = this.selectedHarness();
-    if (!role || !harness) return null;
-    return (harness.agents || []).find((a) => a.role === role.toLowerCase()) || null;
-  });
+  selectedAgent$ = this.store.select(selectSelectedAgentDetail);
 
   consoleLogs = signal<string[]>([]);
   agentStates = signal<Record<string, string>>({
@@ -88,8 +85,7 @@ export class HarnessPageComponent implements OnInit, OnDestroy {
   }
 
   onSelectHarness(harness: Harness) {
-    this.store.dispatch(HarnessActions.loadHarnesses());
-    this.store.dispatch(HarnessActions.selectHarness({ harness }));
+    this.store.dispatch(HarnessActions.loadHarnessDetail({ id: harness.id }));
     this.selectedAgentRole.set(null);
   }
 
@@ -108,13 +104,19 @@ export class HarnessPageComponent implements OnInit, OnDestroy {
   }
 
   onSelectAgent(agent: AgentConfig) {
-    this.store.dispatch(HarnessActions.loadHarnesses());
     this.selectedAgentRole.set(agent.role);
+    if (this.selectedHarness()) {
+      this.store.dispatch(HarnessActions.loadAgentDetail({ 
+        harnessId: this.selectedHarness()!.id, 
+        role: agent.role 
+      }));
+    }
     this.scrollToRight();
   }
 
   onCloseEditor() {
     this.selectedAgentRole.set(null);
+    this.store.dispatch(HarnessActions.clearSelectedAgent());
   }
 
   onSaveAgent(payload: { harnessId: string; role: string; prompt: string; providerId: string; modelName: string }) {

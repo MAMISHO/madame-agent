@@ -13,23 +13,25 @@
 <app-graph-flow
   [harness]="(selectedHarness$ | async)"
   [agentStates]="agentStates()"
-  [selectedAgent]="selectedAgent()"
+  [selectedAgent]="(selectedAgent$ | async)"
   [consoleLogs]="consoleLogs()"
   [showConsole]="showLogsConsole()"
-  [isLoading]="(loading$ | async)!"
+  [isLoading]="(detailLoading$ | async)!"
   (selectAgent)="onSelectAgent($event)"
   (toggleConsole)="onToggleConsole()"
   (clearLogs)="onClearLogs()"
 />
 
 <!-- Sub-Panel: Agent Editor (Slides in when agent selected) -->
-@if (selectedAgent(); as agent) {
+@if (selectedAgentRole(); as role) {
   <app-agent-editor
-    [agent]="agent"
+    [agent]="(selectedAgent$ | async)!"
+    [role]="role"
     [harness]="(selectedHarness$ | async)"
     [providers]="(providers$ | async)!"
     [scalableModels]="(scalableModels$ | async)!"
     [allHarnesses]="(harnesses$ | async)!"
+    [isLoading]="(agentLoading$ | async)!"
     (close)="onCloseEditor()"
     (save)="onSaveAgent($event)"
     (addProvider)="onAddProvider($event)"

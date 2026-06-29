@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import { ScalableModelEntity } from '../core/infra/database/entities/scalable-model.entity';
-import { AgentConfigEntity } from '../core/infra/database/entities/agent-config.entity';
+import { ProviderEntity } from '../core/infra/database/entities/provider.entity';
+import { AgentEntity } from '../core/infra/database/entities/agent.entity';
 import { RepositoryValidator } from '../core/application/services/repository-validator.service';
 
 @Controller('v1/duos')
@@ -96,10 +97,9 @@ export class ScalableModelController {
 
     // Check Relational Integrity: agents using this model
     // Note: virtual provider is 'madame-duo', and modelName stores the scalable model UUID
-    const agentsUsingIt = await AgentConfigEntity.findAll({ 
+    const agentsUsingIt = await AgentEntity.findAll({ 
       where: { 
-        providerId: 'madame-duo',
-        modelName: id
+        modelId: id
       } 
     });
 

@@ -23,17 +23,18 @@ export class PromptService {
     }
   }
 
-  async loadPrompt(id: string, variables: Record<string, string> = {}): Promise<string> {
-    const harnessId = await this.getActiveHarnessId();
+  async loadPrompt(id: string, variables: Record<string, string> = {}, harnessOverride?: string): Promise<string> {
+    const harnessId = harnessOverride || await this.getActiveHarnessId();
     return this.databasePromptStrategy.loadPrompt(id, variables, harnessId);
   }
 
   async loadPromptBySourceTarget(
     source: string,
     target: string,
-    variables: Record<string, string> = {}
+    variables: Record<string, string> = {},
+    harnessOverride?: string
   ): Promise<string> {
-    const harnessId = await this.getActiveHarnessId();
+    const harnessId = harnessOverride || await this.getActiveHarnessId();
     return this.databasePromptStrategy.loadPromptBySourceTarget(source, target, variables, harnessId);
   }
 }

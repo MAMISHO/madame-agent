@@ -1,7 +1,8 @@
-import { Column, DataType, Model, Table } from 'sequelize-typescript';
+import { Column, DataType, Model, Table, HasMany } from 'sequelize-typescript';
+import { ModelEntity } from './model.entity';
 
-@Table({ tableName: 'provider_configs', timestamps: true })
-export class ProviderConfigEntity extends Model {
+@Table({ tableName: 'providers', timestamps: true })
+export class ProviderEntity extends Model {
   @Column({
     type: DataType.UUID,
     defaultValue: DataType.UUIDV4,
@@ -33,4 +34,7 @@ export class ProviderConfigEntity extends Model {
     allowNull: true,
   })
   declare baseUrl: string | undefined;
+
+  @HasMany(() => ModelEntity)
+  declare models?: ModelEntity[];
 }

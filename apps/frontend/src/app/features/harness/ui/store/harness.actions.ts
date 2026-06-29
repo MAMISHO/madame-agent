@@ -7,6 +7,10 @@ export const loadHarnesses = createAction('[Harness] Load Harnesses');
 export const loadHarnessesSuccess = createAction('[Harness] Load Harnesses Success', props<{ harnesses: Harness[] }>());
 export const loadHarnessesFailure = createAction('[Harness] Load Harnesses Failure', props<{ error: string }>());
 
+export const loadHarnessDetail = createAction('[Harness] Load Harness Detail', props<{ id: string }>());
+export const loadHarnessDetailSuccess = createAction('[Harness] Load Harness Detail Success', props<{ harness: Harness }>());
+export const loadHarnessDetailFailure = createAction('[Harness] Load Harness Detail Failure', props<{ error: string }>());
+
 // Select
 export const selectHarness = createAction('[Harness] Select Harness', props<{ harness: Harness }>());
 
@@ -35,6 +39,12 @@ export const updateAgentPromptSuccess = createAction(
   props<{ harnessId: string; role: string; prompt: string; providerId: string; modelName: string }>()
 );
 export const updateAgentPromptFailure = createAction('[Harness] Update Agent Prompt Failure', props<{ error: string }>());
+
+export const loadAgentDetail = createAction('[Harness] Load Agent Detail', props<{ harnessId: string; role: string }>());
+export const loadAgentDetailSuccess = createAction('[Harness] Load Agent Detail Success', props<{ agent: AgentConfig }>());
+export const loadAgentDetailFailure = createAction('[Harness] Load Agent Detail Failure', props<{ error: string }>());
+
+export const clearSelectedAgent = createAction('[Harness] Clear Selected Agent');
 
 // Provider CRUD Actions
 export const loadProviders = createAction('[Provider] Load Providers');

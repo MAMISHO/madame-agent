@@ -1,5 +1,5 @@
 import { createReducer, on } from '@ngrx/store';
-import { Harness } from '../../domain/harness.model';
+import { Harness, AgentConfig } from '../../domain/harness.model';
 import { ProviderConfig } from '../../domain/provider.model';
 import { ScalableModelConfig } from '../../domain/scalable-model.model';
 import * as HarnessActions from './harness.actions';
@@ -9,7 +9,10 @@ export interface HarnessState {
   providers: ProviderConfig[];
   scalableModels: ScalableModelConfig[];
   selectedHarness: Harness | null;
+  selectedAgentDetail: AgentConfig | null;
   loading: boolean;
+  detailLoading: boolean;
+  agentLoading: boolean;
   error: string | null;
 }
 
@@ -18,7 +21,10 @@ export const initialHarnessState: HarnessState = {
   providers: [],
   scalableModels: [],
   selectedHarness: null,
+  selectedAgentDetail: null,
   loading: false,
+  detailLoading: false,
+  agentLoading: false,
   error: null,
 };
 
@@ -28,6 +34,26 @@ export const harnessReducer = createReducer(
   on(HarnessActions.loadHarnesses, (state) => ({
     ...state,
     loading: true,
+  })),
+
+  on(HarnessActions.loadHarnessDetail, (state) => ({
+    ...state,
+    detailLoading: true,
+    selectedAgentDetail: null,
+  })),
+
+  on(HarnessActions.loadHarnessDetailSuccess, (state, { harness }) => ({
+    ...state,
+    harnesses: state.harnesses.map((h) => (h.id === harness.id ? harness : h)),
+    selectedHarness: harness,
+    detailLoading: false,
+    error: null,
+  })),
+
+  on(HarnessActions.loadHarnessDetailFailure, (state, { error }) => ({
+    ...state,
+    detailLoading: false,
+    error,
   })),
 
   on(HarnessActions.loadHarnessesSuccess, (state, { harnesses }) => {
@@ -52,6 +78,31 @@ export const harnessReducer = createReducer(
   on(HarnessActions.selectHarness, (state, { harness }) => ({
     ...state,
     selectedHarness: harness,
+    selectedAgentDetail: null,
+  })),
+
+  on(HarnessActions.loadAgentDetail, (state) => ({
+    ...state,
+    agentLoading: true,
+  })),
+
+  on(HarnessActions.loadAgentDetailSuccess, (state, { agent }) => ({
+    ...state,
+    selectedAgentDetail: agent,
+    agentLoading: false,
+    error: null,
+  })),
+
+  on(HarnessActions.loadAgentDetailFailure, (state, { error }) => ({
+    ...state,
+    selectedAgentDetail: null,
+    agentLoading: false,
+    error,
+  })),
+
+  on(HarnessActions.clearSelectedAgent, (state) => ({
+    ...state,
+    selectedAgentDetail: null,
   })),
 
   // Optimistic Create Harness

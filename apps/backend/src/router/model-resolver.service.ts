@@ -3,7 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { ClassifierService } from '../classifier/classifier.service';
 import { ConfidenceEngineService } from '../confidence/confidence.service';
 import { ScalableModelEntity } from '../core/infra/database/entities/scalable-model.entity';
-import { ProviderConfigEntity } from '../core/infra/database/entities/provider-config.entity';
+import { ProviderEntity } from '../core/infra/database/entities/provider.entity';
+import { HarnessEntity } from '../core/infra/database/entities/harness.entity';
+import { AgentEntity } from '../core/infra/database/entities/agent.entity';
+import { ModelEntity } from '../core/infra/database/entities/model.entity';
 
 export interface ResolvedModel {
   config: any;
@@ -34,6 +37,17 @@ export class ModelResolverService {
   ): Promise<ResolvedModel> {
     const providersConfig = this.configService.get('providers') || {};
     const modelPairs = this.configService.get('model_pairs') || [];
+
+    // --- Dynamic DB Agent Config Interception ---
+    const dbAgentConfig = await this.resolveAgentConfig(modelRaw);
+    if (dbAgentConfig) {
+      return {
+        config: dbAgentConfig,
+        providerKey: dbAgentConfig.provider || 'default',
+        escalated: false,
+      };
+    }
+    // --------------------------------------------
 
     // 1. Check if model matches a composite model pair
     const pair = await this.getModelPair(modelRaw);
@@ -148,6 +162,9 @@ export class ModelResolverService {
    * Resolves the local provider configuration for a model name (composite or direct).
    */
   async getLocalConfig(modelName: string): Promise<any> {
+    const dbAgentConfig = await this.resolveAgentConfig(modelName);
+    if (dbAgentConfig) return dbAgentConfig;
+
     const providersConfig = this.configService.get('providers') || {};
     const pair = await this.getModelPair(modelName);
     const targetId = pair ? pair.local : modelName;
@@ -164,13 +181,34 @@ export class ModelResolverService {
   /**
    * Finds an orchestrator pair by name/id.
    */
-  getOrchestratorPair(modelName: string): any | null {
+  async getOrchestratorPair(modelName: string): Promise<any | null> {
+    // 1. Check static config
     const orchestratorPairs = this.configService.get('orchestrator_pairs') || [];
     for (const pair of orchestratorPairs) {
       if (pair.name === modelName || pair.id === modelName) {
         return pair;
       }
     }
+
+    // 2. Check DB
+    const dbHarness = await HarnessEntity.findOne({ where: { code: modelName } }) ||
+                       await HarnessEntity.findOne({ where: { id: modelName } }) ||
+                       await HarnessEntity.findOne({ where: { name: modelName } });
+
+    if (dbHarness) {
+      return {
+        id: dbHarness.code,
+        name: dbHarness.name,
+        orchestrator: `${dbHarness.code}_orchestrator`,
+        preparer: `${dbHarness.code}_preparer`,
+        planner: `${dbHarness.code}_planner`,
+        supervisor: `${dbHarness.code}_supervisor`,
+        executor: `${dbHarness.code}_executor`,
+        qa: `${dbHarness.code}_qa`,
+        subagents: [`${dbHarness.code}_executor`] // Backwards compatibility for lists of subagents
+      };
+    }
+
     return null;
   }
 
@@ -252,5 +290,52 @@ export class ModelResolverService {
       return 'build';
     }
     return null;
+  }
+
+  private async resolveAgentConfig(modelRaw: string): Promise<any> {
+    if (!modelRaw || !modelRaw.includes('_')) return null;
+    const parts = modelRaw.split('_');
+    const harnessCode = parts[0];
+    const role = parts[1];
+    const rolesList = ['orchestrator', 'preparer', 'planner', 'supervisor', 'executor', 'qa'];
+    if (!rolesList.includes(role)) return null;
+
+    const dbHarness = await HarnessEntity.findOne({ where: { code: harnessCode } }) ||
+                       await HarnessEntity.findOne({ where: { id: harnessCode } });
+    if (!dbHarness) return null;
+
+    const agentConfig = await AgentEntity.findOne({
+      where: { harnessId: dbHarness.id, role },
+      include: [{
+        model: ModelEntity,
+        include: [ProviderEntity]
+      }]
+    });
+    if (!agentConfig) return null;
+
+    const providersConfig = this.configService.get('providers') || {};
+    let providerConfig: any = null;
+    if (agentConfig.model) {
+      const dbModel = agentConfig.model;
+      const dbProvider = dbModel.provider;
+      if (dbProvider) {
+        const isCloud = ['openai', 'gemini', 'nvidia', 'anthropic', 'cloud'].includes(dbProvider.code.toLowerCase());
+        providerConfig = {
+          provider: dbProvider.code,
+          type: isCloud ? 'cloud' : 'ollama',
+          model: dbModel.code,
+          apiKey: dbProvider.apiKey || undefined,
+          baseUrl: dbProvider.baseUrl || undefined
+        };
+      }
+    }
+    if (!providerConfig) {
+      providerConfig = providersConfig['local_medium'] || {
+        provider: 'ollama',
+        type: 'ollama',
+        model: 'gemma4:latest-oc'
+      };
+    }
+    return providerConfig;
   }
 }

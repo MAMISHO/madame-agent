@@ -1,8 +1,9 @@
 import { Column, DataType, Model, Table, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { HarnessEntity } from './harness.entity';
+import { ModelEntity } from './model.entity';
 
-@Table({ tableName: 'agent_configs', timestamps: true })
-export class AgentConfigEntity extends Model {
+@Table({ tableName: 'agents', timestamps: true })
+export class AgentEntity extends Model {
   @Column({
     type: DataType.UUID,
     defaultValue: DataType.UUIDV4,
@@ -16,6 +17,18 @@ export class AgentConfigEntity extends Model {
     unique: true,
   })
   declare code: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+  })
+  declare name: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  declare description: string;
 
   @ForeignKey(() => HarnessEntity)
   @Column({
@@ -36,18 +49,16 @@ export class AgentConfigEntity extends Model {
   })
   declare prompt: string;
 
+  @ForeignKey(() => ModelEntity)
   @Column({
     type: DataType.UUID,
     allowNull: false,
   })
-  declare providerId: string;
-
-  @Column({
-    type: DataType.STRING,
-    allowNull: false,
-  })
-  declare modelName: string;
+  declare modelId: string;
 
   @BelongsTo(() => HarnessEntity)
   declare harness?: HarnessEntity;
+
+  @BelongsTo(() => ModelEntity)
+  declare model?: ModelEntity;
 }

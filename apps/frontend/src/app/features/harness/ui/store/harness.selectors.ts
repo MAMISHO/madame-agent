@@ -18,6 +18,16 @@ export const selectHarnessLoading = createSelector(
   (state) => state.loading
 );
 
+export const selectHarnessDetailLoading = createSelector(
+  selectHarnessState,
+  (state) => state.detailLoading
+);
+
+export const selectHarnessAgentLoading = createSelector(
+  selectHarnessState,
+  (state) => state.agentLoading
+);
+
 export const selectHarnessError = createSelector(
   selectHarnessState,
   (state) => state.error
@@ -31,4 +41,9 @@ export const selectAllProviders = createSelector(
 export const selectAllScalableModels = createSelector(
   selectHarnessState,
   (state) => state.scalableModels
+);
+
+export const selectSelectedAgentDetail = createSelector(
+  selectHarnessState,
+  (state) => state.selectedAgentDetail
 );

@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
-import { from, Observable } from 'rxjs';
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
 import { Harness } from '../domain/harness.model';
 import { ProviderConfig } from '../domain/provider.model';
 import { ScalableModelConfig } from '../domain/scalable-model.model';
@@ -8,138 +9,59 @@ import { ScalableModelConfig } from '../domain/scalable-model.model';
   providedIn: 'root',
 })
 export class HarnessService {
+  private http = inject(HttpClient);
+
   getHarnesses(): Observable<Harness[]> {
-    return from(
-      fetch('/v1/harness').then((res) => {
-        if (!res.ok) throw new Error('Failed to load harnesses.');
-        return res.json();
-      })
-    );
+    return this.http.get<Harness[]>('/v1/harness');
+  }
+
+  getHarness(id: string): Observable<Harness> {
+    return this.http.get<Harness>(`/v1/harness/${id}`);
+  }
+
+  getAgent(harnessId: string, role: string): Observable<import('../domain/harness.model').AgentConfig> {
+    return this.http.get<import('../domain/harness.model').AgentConfig>(`/v1/harness/${harnessId}/agents/${role}`);
   }
 
   createHarness(code: string, name: string, cloneFromHarnessId?: string): Observable<Harness> {
-    return from(
-      fetch('/v1/harness', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, name, cloneFromHarnessId }),
-      }).then(async (res) => {
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || 'Failed to create harness.');
-        }
-        return res.json();
-      })
-    );
+    return this.http.post<Harness>('/v1/harness', { code, name, cloneFromHarnessId });
   }
 
   deleteHarness(id: string): Observable<void> {
-    return from(
-      fetch(`/v1/harness/${id}`, { method: 'DELETE' }).then(async (res) => {
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || 'Failed to delete harness.');
-        }
-        return;
-      })
-    );
+    return this.http.delete<void>(`/v1/harness/${id}`);
   }
 
   makeHarnessActive(id: string): Observable<void> {
-    return from(
-      fetch(`/v1/harness/${id}/active`, { method: 'PUT' }).then((res) => {
-        if (!res.ok) throw new Error('Failed to activate harness.');
-        return;
-      })
-    );
+    return this.http.put<void>(`/v1/harness/${id}/active`, {});
   }
 
   updateAgentPrompt(harnessId: string, role: string, payload: { prompt: string; providerId: string; modelName: string }): Observable<void> {
-    return from(
-      fetch(`/v1/harness/${harnessId}/agents/${role}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }).then((res) => {
-        if (!res.ok) throw new Error('Failed to update agent prompt.');
-        return;
-      })
-    );
+    return this.http.put<void>(`/v1/harness/${harnessId}/agents/${role}`, payload);
   }
 
   // Provider CRUD endpoints
   getProviders(): Observable<ProviderConfig[]> {
-    return from(
-      fetch('/v1/providers').then((res) => {
-        if (!res.ok) throw new Error('Failed to load providers.');
-        return res.json();
-      })
-    );
+    return this.http.get<ProviderConfig[]>('/v1/providers');
   }
 
   createProvider(provider: ProviderConfig): Observable<ProviderConfig> {
-    return from(
-      fetch('/v1/providers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(provider),
-      }).then(async (res) => {
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || 'Failed to create provider.');
-        }
-        return res.json();
-      })
-    );
+    return this.http.post<ProviderConfig>('/v1/providers', provider);
   }
 
   deleteProvider(id: string): Observable<void> {
-    return from(
-      fetch(`/v1/providers/${id}`, { method: 'DELETE' }).then(async (res) => {
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || 'Failed to delete provider.');
-        }
-        return;
-      })
-    );
+    return this.http.delete<void>(`/v1/providers/${id}`);
   }
 
   // Scalable Models CRUD
   getScalableModels(): Observable<ScalableModelConfig[]> {
-    return from(
-      fetch('/v1/duos').then((res) => {
-        if (!res.ok) throw new Error('Failed to load scalable models.');
-        return res.json();
-      })
-    );
+    return this.http.get<ScalableModelConfig[]>('/v1/duos');
   }
 
   createScalableModel(model: ScalableModelConfig): Observable<ScalableModelConfig> {
-    return from(
-      fetch('/v1/duos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(model),
-      }).then(async (res) => {
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || 'Failed to create scalable model.');
-        }
-        return res.json();
-      })
-    );
+    return this.http.post<ScalableModelConfig>('/v1/duos', model);
   }
 
   deleteScalableModel(id: string): Observable<void> {
-    return from(
-      fetch(`/v1/duos/${id}`, { method: 'DELETE' }).then(async (res) => {
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || 'Failed to delete scalable model.');
-        }
-        return;
-      })
-    );
+    return this.http.delete<void>(`/v1/duos/${id}`);
   }
 }
