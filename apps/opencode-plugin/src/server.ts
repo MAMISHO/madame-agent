@@ -23,23 +23,23 @@ const providerHook: ProviderHook = {
       },
     };
 
-    const pairs = [
-      "qwen3.5-o1+deepseek",
-      "qwen3.5-o1+gemini",
-      "gemma4:12b-mlx-oc+deepseek",
-      "gemma4:12b-mlx-oc+gemini",
-      "gemma4:latest-oc+deepseek",
-      "gemma4:latest-oc+gemini",
-    ];
-
-    for (const pair of pairs) {
-      const pairId = `madame-orchestrator-${pair}`;
-      models[pairId] = {
-        id: pairId,
-        name: `Madame-Orchestrator (${pair})`,
-        provider: MADAME_PROVIDER_ID,
-        capabilities: ["chat"],
-      };
+    try {
+      const res = await fetch(`${MADAME_BASE_URL}/v1/models`);
+      if (res.ok) {
+        const data = await res.json();
+        for (const m of data.data || []) {
+          if (m.id && m.id.startsWith("madame-orchestrator-")) {
+            models[m.id] = {
+              id: m.id,
+              name: `Madame-Orchestrator (${m.id.replace("madame-orchestrator-", "")})`,
+              provider: MADAME_PROVIDER_ID,
+              capabilities: ["chat"],
+            };
+          }
+        }
+      }
+    } catch (e) {
+      // Fallback: don't load external models if backend is down
     }
 
     return models;

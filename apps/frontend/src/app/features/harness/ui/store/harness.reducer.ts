@@ -160,14 +160,14 @@ export const harnessReducer = createReducer(
   on(HarnessActions.makeHarnessActive, (state, { harness }) => {
     const updatedList = state.harnesses.map((h) => ({
       ...h,
-      isActive: h.id === harness.id,
+      isActive: h.id === harness.id ? !h.isActive : h.isActive,
     }));
     return {
       ...state,
       harnesses: updatedList,
       selectedHarness: state.selectedHarness?.id === harness.id
-        ? { ...state.selectedHarness, isActive: true }
-        : (state.selectedHarness ? { ...state.selectedHarness, isActive: false } : null),
+        ? { ...state.selectedHarness, isActive: !state.selectedHarness.isActive }
+        : state.selectedHarness,
     };
   }),
 

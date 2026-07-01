@@ -107,10 +107,14 @@ export class HarnessService {
     const harness = await this.harnessRepo.findById(id);
     if (!harness) throw new NotFoundException('Harness not found.');
     
-    await this.harnessRepo.deactivateAll();
-    await this.harnessRepo.update(id, { isActive: true });
+    const newState = !harness.isActive;
+    await this.harnessRepo.update(id, { isActive: newState });
     
-    return { message: `Harness "${harness.name}" is now active.`, activeId: id };
+    return { 
+      message: `Harness "${harness.name}" is now ${newState ? 'active' : 'inactive'}.`, 
+      activeId: id,
+      isActive: newState 
+    };
   }
 
   async delete(id: string) {
