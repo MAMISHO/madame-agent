@@ -11,9 +11,19 @@ Antes de instalar Madame Agent, asegúrate de tener instalados los siguientes co
 2. **OpenCode** (el IDE o servidor de terminal `opencode`). Debes haberlo iniciado al menos una vez para que se cree su estructura de configuración inicial.
 3. **Git** (para descargar y actualizar el repositorio).
 
+## Instalación Rápida (Un Solo Paso)
+
+Para instalar Madame Agent automáticamente en un solo paso, abre tu terminal y ejecuta el siguiente comando:
+
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mamisho/madame-agent/main/scripts/bootstrap.sh | bash
+```
+
 ---
 
-## Instalación Paso a Paso (Modo Beta/Desarrollo)
+## Instalación Paso a Paso (Modo Manual)
 
 Para descargar e instalar el plugin y el backend de forma completamente automatizada en tu sistema, ejecuta el siguiente bloque de comandos en tu terminal:
 
