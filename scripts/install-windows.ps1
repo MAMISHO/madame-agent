@@ -3,6 +3,19 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "=== Iniciando instalación para Windows ===" -ForegroundColor Green
 
+# 0. Verificar requisitos previos
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    Write-Error "ERROR: Node.js no está instalado. Instálalo antes de continuar."
+    Exit 1
+}
+
+$nodeVersionString = node -v
+$nodeMajorVersion = [int]($nodeVersionString -replace '^v','' -split '\.')[0]
+if ($nodeMajorVersion -lt 18) {
+    Write-Error "ERROR: Se requiere Node.js versión 18 o superior. Versión detectada: $nodeVersionString"
+    Exit 1
+}
+
 # 1. Verificar si OpenCode está instalado
 $opencodeConfigDir = Join-Path $env:USERPROFILE ".config\opencode"
 $opencodeJsonPath = Join-Path $opencodeConfigDir "opencode.json"
@@ -18,7 +31,39 @@ if (-not (Test-Path $pluginsDir)) {
     New-Item -ItemType Directory -Force -Path $pluginsDir | Out-Null
 }
 
-# 2. Compilar y empaquetar
+# 2. Determinar puerto y verificar conflictos
+$port = "3001"
+if (Test-Path $opencodeJsonPath) {
+    try {
+        $config = Get-Content $opencodeJsonPath -Raw | ConvertFrom-Json
+        $baseURL = $config.provider.'madame-agent'.options.baseURL
+        if ($baseURL -and $baseURL -match ':(\d+)') {
+            $port = $Matches[1]
+        }
+    } catch {}
+}
+
+Write-Host "Verificando estado del puerto $port..." -ForegroundColor Cyan
+$portOccupied = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+if ($portOccupied) {
+    $pid = $portOccupied[0].OwningProcess
+    try {
+        $health = Invoke-RestMethod -Uri "http://localhost:$port/v1/health" -TimeoutSec 2 -ErrorAction SilentlyContinue
+        if ($health.status -eq "ok" -and $health.providers) {
+            Write-Host "Madame Agent detectado ejecutándose en el puerto $port (PID $pid). Deteniendo proceso para reinstalación limpia..." -ForegroundColor Yellow
+            Stop-Process -Id $pid -Force
+            Start-Sleep -Seconds 1
+        } else {
+            Write-Error "ERROR: El puerto $port ya está ocupado por otra aplicación externa (PID $pid)."
+            Exit 1
+        }
+    } catch {
+        Write-Error "ERROR: El puerto $port ya está ocupado por otra aplicación externa (PID $pid)."
+        Exit 1
+    }
+}
+
+# 3. Compilar y empaquetar
 Write-Host "Compilando y empaquetando la aplicación..." -ForegroundColor Cyan
 npm run package
 
@@ -68,7 +113,7 @@ try {
       npm: '@ai-sdk/openai-compatible',
       name: 'Madame Agent (hybrid proxy)',
       options: {
-        baseURL: 'http://localhost:3001/v1'
+        baseURL: 'http://localhost:$port/v1'
       },
       models: {
         'madame-auto': {
@@ -76,6 +121,9 @@ try {
         }
       }
     };
+  } else {
+    if (!config.provider['madame-agent'].options) config.provider['madame-agent'].options = {};
+    config.provider['madame-agent'].options.baseURL = 'http://localhost:$port/v1';
   }
   fs.writeFileSync('$($opencodeJsonPath.Replace('\', '/'))', JSON.stringify(config, null, 2));
   console.log('opencode.json actualizado correctamente.');

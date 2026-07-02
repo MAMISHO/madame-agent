@@ -18,7 +18,11 @@ Para instalar Madame Agent automáticamente en un solo paso, abre tu terminal y 
 ### macOS / Linux
 
 ```bash
+# Instalación estándar (puerto 3001)
 curl -fsSL https://raw.githubusercontent.com/MAMISHO/madame-agent/main/scripts/bootstrap.sh | bash
+
+# Si el puerto 3001 está ocupado, puedes indicar otro puerto (por ejemplo, el 3002):
+curl -fsSL https://raw.githubusercontent.com/MAMISHO/madame-agent/main/scripts/bootstrap.sh | bash -s -- --port 3002
 ```
 
 ---
@@ -74,5 +78,30 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 
 ## Uso y Funcionamiento del Plugin
 
-1. **Arranque y Parada Sincronizados**: Al iniciar OpenCode (o el comando `opencode serve`), el plugin detecta si el backend de Madame Agent está en el puerto `3001`. Si está apagado, lo arranca de forma autónoma. Al cerrar el IDE o detener el proceso principal, el servidor de NestJS se apaga automáticamente liberando el puerto.
+1. **Arranque y Parada Sincronizados**: Al iniciar OpenCode (o el comando `opencode serve`), el plugin detecta si el backend de Madame Agent está activo en el puerto configurado (3001 por defecto). Si está apagado, lo arranca de forma autónoma. Al cerrar el IDE o detener el proceso principal, el servidor de NestJS se apaga automáticamente liberando el puerto.
 2. **Interfaz de Gestión**: Abre tu navegador en `http://localhost:3001/#/harness` para configurar tus arneses de modelos y ver las métricas en tiempo real.
+
+---
+
+## Personalización de Puerto y Resiliencia
+
+### Cómo cambiar el puerto de Madame Agent
+Si el puerto `3001` ya está ocupado en tu máquina, puedes parametrizar un puerto diferente en tu archivo `~/.config/opencode/opencode.json` modificando el campo `baseURL` del proveedor:
+
+```json
+{
+  "provider": {
+    "madame-agent": {
+      "options": {
+        "baseURL": "http://localhost:3002/v1"
+      }
+    }
+  }
+}
+```
+
+El plugin leerá automáticamente este valor en el arranque e iniciará el servidor backend de Madame Agent en el nuevo puerto configurado (`3002` en este caso).
+
+### Resiliencia durante la Instalación
+* Si realizas una reinstalación o actualización del monorrepo mientras Madame Agent se está ejecutando en el puerto configurado, el script de instalación detectará que el puerto está ocupado por Madame Agent (mediante una verificación interna de su estado de salud), detendrá el proceso anterior automáticamente de forma limpia y procederá con la copia de los nuevos compilados sin bloqueos de archivos.
+* Si el puerto está ocupado por una aplicación externa que no es Madame Agent, el script se detendrá mostrando un error descriptivo e indicando que debes configurar un puerto diferente antes de continuar.

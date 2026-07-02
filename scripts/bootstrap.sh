@@ -27,7 +27,7 @@ npm install
 
 echo "Ejecutando script de instalación..."
 chmod +x scripts/install.sh scripts/install-unix.sh
-./scripts/install.sh
+./scripts/install.sh "$@"
 
 # 4. Limpieza del directorio temporal
 echo "Limpiando archivos temporales..."

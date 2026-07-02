@@ -13,7 +13,44 @@ fi
 # Asegurar que existe la carpeta de configuración de opencode
 mkdir -p "$OPENCODE_CONFIG_DIR/plugins"
 
-# 2. Compilar y empaquetar el monorrepo
+# 2. Determinar puerto y verificar conflictos
+CONFIG_FILE="$OPENCODE_CONFIG_DIR/opencode.json"
+PORT="3001"
+if [ -n "$MADAME_PORT" ]; then
+    PORT="$MADAME_PORT"
+elif [ -f "$CONFIG_FILE" ]; then
+    PORT_DETECTED=$(node -e "
+const fs = require('fs');
+try {
+  const config = JSON.parse(fs.readFileSync('$CONFIG_FILE', 'utf8'));
+  const baseURL = config.provider?.['madame-agent']?.options?.baseURL;
+  if (baseURL) {
+    const match = baseURL.match(/:(\d+)/);
+    if (match) console.log(match[1]);
+  }
+} catch (e) {}
+" 2>/dev/null || echo "")
+    if [ -n "$PORT_DETECTED" ]; then
+        PORT="$PORT_DETECTED"
+    fi
+fi
+
+echo "Verificando estado del puerto $PORT..."
+if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null ; then
+    HEALTH_CHECK=$(curl -s --max-time 2 http://localhost:$PORT/v1/health || true)
+    if [[ "$HEALTH_CHECK" == *"status"* && "$HEALTH_CHECK" == *"ok"* ]]; then
+        echo "Madame Agent detectado ejecutándose en el puerto $PORT. Deteniendo proceso para reinstalación limpia..."
+        lsof -t -i :$PORT | xargs kill -9 2>/dev/null || true
+        sleep 1
+    else
+        echo "ERROR: El puerto $PORT ya está ocupado por otra aplicación externa." >&2
+        echo "Puedes especificar un puerto libre diferente usando la opción --port:" >&2
+        echo "  ./scripts/install.sh --port 3002" >&2
+        exit 1
+    fi
+fi
+
+# 3. Compilar y empaquetar el monorrepo
 echo "Compilando y empaquetando la aplicación..."
 npm run package
 
@@ -63,7 +100,7 @@ try {
       npm: '@ai-sdk/openai-compatible',
       name: 'Madame Agent (hybrid proxy)',
       options: {
-        baseURL: 'http://localhost:3001/v1'
+        baseURL: 'http://localhost:$PORT/v1'
       },
       models: {
         'madame-auto': {
@@ -71,6 +108,10 @@ try {
         }
       }
     };
+  } else {
+    // Si ya existe el proveedor, actualizamos su baseURL para usar el puerto seleccionado
+    if (!config.provider['madame-agent'].options) config.provider['madame-agent'].options = {};
+    config.provider['madame-agent'].options.baseURL = 'http://localhost:$PORT/v1';
   }
   
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));

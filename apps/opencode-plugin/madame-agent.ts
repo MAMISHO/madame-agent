@@ -18,7 +18,7 @@ import * as fs from "fs"
 import * as path from "path"
 import * as os from "os"
 
-const PROXY_URL = "http://localhost:3001"
+let PROXY_URL = "http://localhost:3001"
 
 // Models that madame-agent exposes — must match what the server serves
 const MADAME_MODELS: Record<string, ModelV2> = {
@@ -102,6 +102,39 @@ You have access to madame-agent's orchestrator models for complex tasks:
 export const MadameAgent: Plugin = async (ctx) => {
   const log = (...args: any[]) => console.log("[madame-agent]", ...args)
 
+  const getDefaultInstallDir = () => {
+    if (process.platform === 'win32') {
+      return path.join(os.homedir(), 'AppData', 'Local', 'madame-agent');
+    }
+    return path.join(os.homedir(), '.local', 'share', 'madame-agent');
+  };
+
+  let projectRoot = getDefaultInstallDir();
+  let port = "3001";
+
+  try {
+    const configPath = path.join(os.homedir(), ".config/opencode/opencode.json")
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf8"))
+      if (config.madame?.server?.path) {
+        projectRoot = config.madame.server.path
+      }
+      const baseURL = config.provider?.['madame-agent']?.options?.baseURL
+      if (baseURL) {
+        const match = baseURL.match(/:(\d+)/)
+        if (match) {
+          port = match[1]
+        }
+        const urlMatch = baseURL.match(/^(https?:\/\/[^\/:]+(:\d+)?)/)
+        if (urlMatch) {
+          PROXY_URL = urlMatch[1]
+        }
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+
   // Verify proxy is reachable (non-blocking)
   fetch(`${PROXY_URL}/v1/models`)
     .then((res) => res.json())
@@ -110,27 +143,7 @@ export const MadameAgent: Plugin = async (ctx) => {
       log(`Proxy reachable at ${PROXY_URL} (${count} models registered)`)
     })
     .catch(() => {
-      log(`Proxy not reachable at ${PROXY_URL} — starting madame-agent automatically...`)
-      
-      const getDefaultInstallDir = () => {
-        if (process.platform === 'win32') {
-          return path.join(os.homedir(), 'AppData', 'Local', 'madame-agent');
-        }
-        return path.join(os.homedir(), '.local', 'share', 'madame-agent');
-      };
-
-      let projectRoot = getDefaultInstallDir();
-      try {
-        const configPath = path.join(os.homedir(), ".config/opencode/opencode.json")
-        if (fs.existsSync(configPath)) {
-          const config = JSON.parse(fs.readFileSync(configPath, "utf8"))
-          if (config.madame?.server?.path) {
-            projectRoot = config.madame.server.path
-          }
-        }
-      } catch (err) {
-        // ignore
-      }
+      log(`Proxy not reachable at ${PROXY_URL} — starting madame-agent automatically on port ${port}...`)
 
       // Check where main.js is located
       let mainJs = path.join(projectRoot, "backend/main.js")
@@ -145,7 +158,7 @@ export const MadameAgent: Plugin = async (ctx) => {
       const child = spawn("node", [mainJs], {
         cwd: projectRoot,
         stdio: "inherit",
-        env: { ...process.env, PORT: "3001" },
+        env: { ...process.env, PORT: port },
       })
     })
 
