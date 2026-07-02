@@ -17,9 +17,26 @@ import configuration from './config/configuration';
 @Module({
   imports: [
     DatabaseModule,
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', '..', 'frontend', 'dist', 'frontend', 'browser'),
-      exclude: ['/v1/(.*)', '/v1'],
+    ServeStaticModule.forRootAsync({
+      useFactory: () => {
+        const prodPath = join(__dirname, '..', 'frontend');
+        const devPathInApps = join(__dirname, '..', '..', 'frontend', 'dist', 'frontend', 'browser');
+        const devPathInRoot = join(__dirname, '..', 'apps', 'frontend', 'dist', 'frontend', 'browser');
+        
+        let rootPath = devPathInApps;
+        if (require('fs').existsSync(prodPath)) {
+          rootPath = prodPath;
+        } else if (require('fs').existsSync(devPathInRoot)) {
+          rootPath = devPathInRoot;
+        }
+        
+        console.log(`[static-serve] Resolved frontend rootPath: ${rootPath} (exists: ${require('fs').existsSync(rootPath)})`);
+        
+        return [{
+          rootPath,
+          exclude: ['/v1*', '/api*'],
+        }];
+      }
     }),
     ConfigModule.forRoot({
       isGlobal: true,

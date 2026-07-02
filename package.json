@@ -11,8 +11,10 @@
     "backend:build": "npm run build -w apps/backend",
     "backend:start": "npm run start -w apps/backend",
     "backend:dev": "npm run start:dev -w apps/backend",
+    "frontend:build": "npm run build -w apps/frontend",
     "frontend:dev": "npm run start -w apps/frontend",
-    "plugin:build": "npm run build -w apps/opencode-plugin"
+    "plugin:build": "npm run build -w apps/opencode-plugin",
+    "package": "npm run frontend:build && npm run backend:build && npm run package -w apps/opencode-plugin"
   },
   "devDependencies": {
     "@nx/eslint": "23.0.1",

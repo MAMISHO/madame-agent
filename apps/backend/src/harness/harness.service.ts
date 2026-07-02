@@ -15,6 +15,9 @@ import { ProviderEntity } from '../core/infra/database/entities/provider.entity'
 import { ModelEntity } from '../core/infra/database/entities/model.entity';
 import { ObservabilityService } from '../observability/observability.service';
 import { RepositoryValidator } from '../core/application/services/repository-validator.service';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 @Injectable()
 export class HarnessService {
@@ -94,6 +97,7 @@ export class HarnessService {
     }
 
     const created = await this.harnessRepo.findById(newHarness.id);
+    await this.syncToOpenCode();
     return this.harnessMapper.toDTO(created!);
   }
 
@@ -109,6 +113,7 @@ export class HarnessService {
     
     const newState = !harness.isActive;
     await this.harnessRepo.update(id, { isActive: newState });
+    await this.syncToOpenCode();
     
     return { 
       message: `Harness "${harness.name}" is now ${newState ? 'active' : 'inactive'}.`, 
@@ -131,6 +136,7 @@ export class HarnessService {
         await this.harnessRepo.update(defaultHarness.id, { isActive: true });
       }
     }
+    await this.syncToOpenCode();
     return { message: 'Harness deleted successfully.' };
   }
 
@@ -212,5 +218,55 @@ export class HarnessService {
     if (!agent) throw new NotFoundException(`Agent not found for role ${role} in this harness.`);
     const agentMapper = new AgentMapper();
     return agentMapper.toDTO(agent);
+  }
+
+  private async syncToOpenCode() {
+    try {
+      const configPath = path.join(os.homedir(), '.config/opencode/opencode.json');
+      if (!fs.existsSync(configPath)) {
+        this.logger.warn(`OpenCode config not found at ${configPath}, skipping sync.`);
+        return;
+      }
+      
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (!config.provider || !config.provider['madame-agent']) {
+        this.logger.warn(`Madame Agent provider not configured in ${configPath}, skipping sync.`);
+        return;
+      }
+
+      const activeHarnesses = await this.harnessRepo.findAll();
+      const activeOnly = activeHarnesses.filter(h => h.isActive);
+
+      const models: Record<string, any> = {
+        'madame-auto': {
+          name: 'Madame Auto (Dynamic Routing)'
+        },
+        'madame-local-only': {
+          name: 'Madame Local Only (Ollama)'
+        }
+      };
+
+      for (const harness of activeOnly) {
+        models[`madame-orchestrator-${harness.code}`] = {
+          name: `Madame-Orchestrator (${harness.name})`
+        };
+        models[harness.code] = {
+          name: harness.name
+        };
+      }
+
+      const defaultModels = ['smart-dev', 'smart-google'];
+      for (const m of defaultModels) {
+        if (!models[m]) {
+          models[m] = { name: m };
+        }
+      }
+
+      config.provider['madame-agent'].models = models;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      this.logger.log(`Synced ${Object.keys(models).length} models to opencode.json`);
+    } catch (err: any) {
+      this.logger.error(`Failed to sync models to OpenCode: ${err.message}`);
+    }
   }
 }

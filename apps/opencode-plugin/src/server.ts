@@ -28,14 +28,14 @@ const providerHook: ProviderHook = {
       if (res.ok) {
         const data = await res.json();
         for (const m of data.data || []) {
-          if (m.id && m.id.startsWith("madame-orchestrator-")) {
-            models[m.id] = {
-              id: m.id,
-              name: `Madame-Orchestrator (${m.id.replace("madame-orchestrator-", "")})`,
-              provider: MADAME_PROVIDER_ID,
-              capabilities: ["chat"],
-            };
-          }
+          models[m.id] = {
+            id: m.id,
+            name: m.id.startsWith("madame-orchestrator-")
+              ? `Madame-Orchestrator (${m.id.replace("madame-orchestrator-", "")})`
+              : m.id,
+            provider: MADAME_PROVIDER_ID,
+            capabilities: ["chat"],
+          };
         }
       }
     } catch (e) {
@@ -49,6 +49,7 @@ const providerHook: ProviderHook = {
 import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,16 +64,17 @@ export const server: Plugin = async () => {
     });
     if (!res.ok) throw new Error();
   } catch (error) {
-    const projectRoot = path.resolve(__dirname, "../../");
-    const mainJs = path.join(projectRoot, "dist/main.js");
+    const pluginRoot = path.resolve(__dirname, "..");
+    const prodMainJs = path.join(pluginRoot, "backend/main.js");
+    const isProd = fs.existsSync(prodMainJs);
+
+    const mainJs = isProd ? prodMainJs : path.join(path.resolve(__dirname, "../../"), "dist/main.js");
+    const cwd = isProd ? pluginRoot : path.resolve(__dirname, "../../");
     
     const child = spawn("node", [mainJs], {
-      cwd: projectRoot,
-      detached: true,
-      stdio: "ignore",
+      cwd,
       env: { ...process.env, PORT: "3001" },
     });
-    child.unref();
   }
 
   hooks["chat.params"] = async (_input, output) => {
