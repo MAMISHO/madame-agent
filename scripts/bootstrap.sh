@@ -18,7 +18,7 @@ fi
 # 2. Descarga temporal del repositorio
 TEMP_DIR=$(mktemp -d)
 echo "Clonando repositorio en directorio temporal: $TEMP_DIR..."
-git clone https://github.com/mamisho/madame-agent.git "$TEMP_DIR"
+git clone https://github.com/MAMISHO/madame-agent.git "$TEMP_DIR"
 
 # 3. Compilación e instalación
 cd "$TEMP_DIR"

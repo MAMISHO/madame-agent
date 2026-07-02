@@ -18,7 +18,7 @@ Para instalar Madame Agent automáticamente en un solo paso, abre tu terminal y 
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mamisho/madame-agent/main/scripts/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MAMISHO/madame-agent/main/scripts/bootstrap.sh | bash
 ```
 
 ---
@@ -31,7 +31,7 @@ Para descargar e instalar el plugin y el backend de forma completamente automati
 
 ```bash
 # 1. Clonar el repositorio oficial
-git clone https://github.com/mamisho/madame-agent.git
+git clone https://github.com/MAMISHO/madame-agent.git
 cd madame-agent
 
 # 2. Instalar dependencias globales del monorrepo
@@ -46,7 +46,7 @@ chmod +x scripts/install.sh scripts/install-unix.sh
 
 ```powershell
 # 1. Clonar el repositorio oficial
-git clone https://github.com/mamisho/madame-agent.git
+git clone https://github.com/MAMISHO/madame-agent.git
 cd madame-agent
 
 # 2. Instalar dependencias globales del monorrepo
