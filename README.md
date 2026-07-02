@@ -1,98 +1,68 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Madame Agent (hybrid proxy)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Madame Agent es un monorrepo que proporciona un proxy híbrido (backend NestJS, frontend Angular) y un plugin de OpenCode para orquestar la delegación entre modelos locales (Ollama) y en la nube.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## Requisitos Previos
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Antes de instalar Madame Agent, asegúrate de tener instalados los siguientes componentes:
+1. **Node.js** (v18 o superior) y **npm** (que incluye `npx`).
+2. **OpenCode** (el IDE o servidor de terminal `opencode`). Debes haberlo iniciado al menos una vez para que se cree su estructura de configuración inicial.
+3. **Git** (para descargar y actualizar el repositorio).
 
-## Project setup
+---
+
+## Instalación Paso a Paso (Modo Beta/Desarrollo)
+
+Para descargar e instalar el plugin y el backend de forma completamente automatizada en tu sistema, ejecuta el siguiente bloque de comandos en tu terminal:
+
+### macOS / Linux
 
 ```bash
-$ npm install
+# 1. Clonar el repositorio oficial
+git clone https://github.com/mamisho/madame-agent.git
+cd madame-agent
+
+# 2. Instalar dependencias globales del monorrepo
+npm install
+
+# 3. Lanzar el script de instalación automática
+chmod +x scripts/install.sh scripts/install-unix.sh
+./scripts/install.sh
 ```
 
-## Compile and run the project
+### Windows (PowerShell)
 
-```bash
-# development
-$ npm run start
+```powershell
+# 1. Clonar el repositorio oficial
+git clone https://github.com/mamisho/madame-agent.git
+cd madame-agent
 
-# watch mode
-$ npm run start:dev
+# 2. Instalar dependencias globales del monorrepo
+npm install
 
-# production mode
-$ npm run start:prod
+# 3. Lanzar el script de instalación automática
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\scripts\install.sh
 ```
 
-## Run tests
+---
 
-```bash
-# unit tests
-$ npm run test
+## ¿Qué hace el Script de Instalación?
 
-# e2e tests
-$ npm run test:e2e
+1. **Verificación de Entorno**: Comprueba que tienes instalados Node.js, npm, npx y OpenCode.
+2. **Compilación y Empaquetado**: Compila la interfaz de Angular, el servidor NestJS y el plugin en TypeScript, ensamblando un build autocontenido en la carpeta `dist/apps/opencode-plugin`.
+3. **Directorio de Distribución**: Copia el build completo al directorio de usuario del sistema (independiente de tu carpeta de desarrollo/repositorio):
+   - **macOS / Linux**: `$HOME/.local/share/madame-agent/`
+   - **Windows**: `%LOCALAPPDATA%\madame-agent\`
+4. **Persistencia de Datos**: Crea la carpeta `$HOME/.madame-agent/` donde se persistirá de forma segura tu base de datos SQLite (`madame-agent.sqlite`), evitando pérdida de arneses al actualizar el código.
+5. **Instalación del Plugin**: Instala el script puente `madame-agent.ts` en `~/.config/opencode/plugins/madame-agent.ts`.
+6. **Configuración Automática**: Realiza una copia de seguridad con fecha y hora de tu `opencode.json` y actualiza la configuración para registrar el proveedor `madame-agent` y el path del backend dinámicamente.
 
-# test coverage
-$ npm run test:cov
-```
+---
 
-## Deployment
+## Uso y Funcionamiento del Plugin
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+1. **Arranque y Parada Sincronizados**: Al iniciar OpenCode (o el comando `opencode serve`), el plugin detecta si el backend de Madame Agent está en el puerto `3001`. Si está apagado, lo arranca de forma autónoma. Al cerrar el IDE o detener el proceso principal, el servidor de NestJS se apaga automáticamente liberando el puerto.
+2. **Interfaz de Gestión**: Abre tu navegador en `http://localhost:3001/#/harness` para configurar tus arneses de modelos y ver las métricas en tiempo real.

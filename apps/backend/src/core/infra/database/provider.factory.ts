@@ -7,12 +7,25 @@ import { EdgeEntity } from "./entities/edge.entity";
 import { ExecutionLogEntity } from "./entities/execution-log.entity";
 import { ScalableModelEntity } from "./entities/scalable-model.entity";
 import { join, resolve } from "path";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, mkdirSync } from "fs";
 import * as yaml from 'js-yaml';
+import * as os from "os";
 
-const storagePath = process.cwd().endsWith('apps/backend')
-  ? join(process.cwd(), 'madame-agent.sqlite')
-  : join(process.cwd(), 'apps/backend/madame-agent.sqlite');
+const getStoragePath = () => {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  if (process.env.NODE_ENV === 'production' || process.env.MADAME_ENV === 'production') {
+    const dbDir = join(os.homedir(), '.madame-agent');
+    if (!existsSync(dbDir)) {
+      mkdirSync(dbDir, { recursive: true });
+    }
+    return join(dbDir, 'madame-agent.sqlite');
+  }
+  return process.cwd().endsWith('apps/backend')
+    ? join(process.cwd(), 'madame-agent.sqlite')
+    : join(process.cwd(), 'apps/backend/madame-agent.sqlite');
+};
+
+const storagePath = getStoragePath();
 
 export const sequelize = new Sequelize({
   dialect: "sqlite",
