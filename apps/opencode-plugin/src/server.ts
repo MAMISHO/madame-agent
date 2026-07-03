@@ -24,18 +24,22 @@ const providerHook: ProviderHook = {
     };
 
     try {
-      const res = await fetch(`${MADAME_BASE_URL}/v1/models`);
+      const res = await fetch(`${MADAME_BASE_URL}/api/tags`);
       if (res.ok) {
         const data = await res.json();
-        for (const m of data.data || []) {
-          models[m.id] = {
-            id: m.id,
-            name: m.id.startsWith("madame-orchestrator-")
-              ? `Madame-Orchestrator (${m.id.replace("madame-orchestrator-", "")})`
-              : m.id,
-            provider: MADAME_PROVIDER_ID,
-            capabilities: ["chat"],
-          };
+        for (const m of data.models || []) {
+          const modelId = m.model as string;
+          // Only include orchestrator models (created from active harnesses)
+          if (modelId.startsWith("madame-orchestrator-")) {
+            const harnessCode = modelId.replace("madame-orchestrator-", "");
+            models[modelId] = {
+              id: modelId,
+              name: `Madame-Orchestrator (${harnessCode})`,
+              provider: MADAME_PROVIDER_ID,
+              capabilities: ["chat"],
+              metadata: { description: `Orchestrator for harness: ${harnessCode}` },
+            };
+          }
         }
       }
     } catch (e) {

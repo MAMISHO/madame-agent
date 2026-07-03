@@ -1,9 +1,8 @@
-import { Component, Input, Output, EventEmitter, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, signal, computed, effect, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
 import { Harness, AgentConfig } from '../../domain/harness.model';
 import { ProviderConfig } from '../../domain/provider.model';
 import { ScalableModelConfig } from '../../domain/scalable-model.model';
-import { computed } from '@angular/core';
 
 @Component({
   selector: 'app-agent-editor',
@@ -12,7 +11,10 @@ import { computed } from '@angular/core';
   templateUrl: './agent-editor.component.html',
   styleUrl: './agent-editor.component.css',
 })
-export class AgentEditorComponent {
+export class AgentEditorComponent implements AfterViewInit {
+  @ViewChild('providerSelect') providerSelect!: ElementRef<HTMLSelectElement>;
+  @ViewChild('modelSelect') modelSelect?: ElementRef<HTMLSelectElement>;
+
   private _agent!: AgentConfig;
 
   @Input()
@@ -49,6 +51,32 @@ export class AgentEditorComponent {
   editPrompt = signal('');
   editProvider = signal('');
   editModel = signal('');
+
+  // Track providers as a signal for reactivity
+  providersSignal = signal<ProviderConfig[]>([]);
+  
+  constructor() {
+    // Sync providers input to signal
+    effect(() => {
+      this.providersSignal.set(this.providers);
+    }, { allowSignalWrites: true });
+  }
+
+  ngAfterViewInit(): void {
+    this.syncSelectValue();
+  }
+
+  private syncSelectValue(): void {
+    setTimeout(() => {
+      const sel = this.providerSelect?.nativeElement;
+      if (sel) {
+        sel.value = this.editProvider();
+      }
+      if (this.modelSelect?.nativeElement) {
+        this.modelSelect.nativeElement.value = this.editModel();
+      }
+    }, 0);
+  }
 
   // Add provider form state
   showAddProviderForm = signal(false);
@@ -87,6 +115,38 @@ export class AgentEditorComponent {
 
   // Default hardcoded ones for initial select option fallback
   readonly defaultProviderIds = ['ollama', 'gemini', 'openai', 'anthropic', 'nvidia', 'cloud', 'madame-duo'];
+
+  // Computed list of all available providers including current selection
+  allProviderOptions = computed(() => {
+    const currentProviderId = this.editProvider();
+    const providersList = this.providersSignal();
+    const currentProvider = providersList.find(p => p.id === currentProviderId);
+    
+    const options: { id: string; name: string }[] = [];
+    
+    // Add default providers
+    for (const id of this.defaultProviderIds) {
+      options.push({ id, name: id.toUpperCase() });
+    }
+    
+    // Add custom providers from the loaded list
+    for (const p of providersList) {
+      if (!this.defaultProviderIds.includes(p.id)) {
+        options.push({ id: p.id, name: `${p.name} (${p.id})` });
+      }
+    }
+    
+    // CRITICAL: Always include the current provider if it exists and isn't in the list
+    // This handles the case where providers haven't loaded yet or the provider is custom
+    if (currentProviderId && !options.some(o => o.id === currentProviderId)) {
+      const displayName = currentProvider 
+        ? `${currentProvider.name} (${currentProviderId})`
+        : `${currentProviderId} (custom)`;
+      options.push({ id: currentProviderId, name: displayName });
+    }
+    
+    return options;
+  });
 
   onPromptChange(event: Event) {
     this.editPrompt.set((event.target as HTMLTextAreaElement).value);

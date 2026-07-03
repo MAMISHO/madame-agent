@@ -7,10 +7,11 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        PROXY: ${HTTP_PROXY:-}
-        NOPROXY: ${NO_PROXY:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
     image: localhost/madame-dev:latest
-    container_name: madame-agent-dev
+    container_name: madam-dev
     privileged: true
     environment:
       - PORT=3001
@@ -18,7 +19,7 @@ services:
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
       - http_proxy=${HTTP_PROXY:-}
-      - https_proxy=${HTTPS_PROXY:-}
+      - https_proxy=${HTTP_PROXY:-}
       - NO_PROXY=${NO_PROXY:-}
       - no_proxy=${NO_PROXY:-}
       # OpenCode configuration
@@ -29,7 +30,10 @@ services:
       - "3001:3001"
     volumes:
       - .:/workspace/madame-agent
-      - ./.container-data/backend:/root/.local/share/madame-agent/backend
+      - madam-agent-data:/root/.local/share
     working_dir: /workspace/madame-agent
     stdin_open: true
     tty: true
+
+volumes:
+  madam-agent-data:

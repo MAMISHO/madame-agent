@@ -32,16 +32,10 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
           <label style="margin: 0;">LLM Connection Provider</label>
         </div>
-        <select [value]="editProvider()" (change)="onProviderChange($event)" [disabled]="harness?.isDefault" class="mochi-input select-input">
-          <!-- Default hardcoded ones -->
-          @for (p of defaultProviderIds; track p) {
-            <option [value]="p">{{ p | uppercase }}</option>
-          }
-          <!-- Custom ones from database -->
-          @for (p of providers; track p.id) {
-            @if (!defaultProviderIds.includes(p.id)) {
-              <option [value]="p.id">{{ p.name }} ({{ p.id }})</option>
-            }
+        <select #providerSelect (change)="onProviderChange($event)" [disabled]="harness?.isDefault" class="mochi-input select-input">
+          <option value="">Select provider...</option>
+          @for (p of allProviderOptions(); track p.id) {
+            <option [attr.value]="p.id" [selected]="editProvider() === p.id">{{ p.name }}</option>
           }
         </select>
       </div>
@@ -53,10 +47,10 @@
         </div>
         
         @if (editProvider() === 'madame-duo') {
-          <select [value]="editModel()" (change)="onModelChange($event)" [disabled]="harness?.isDefault" class="mochi-input select-input">
+          <select (change)="onModelChange($event)" [disabled]="harness?.isDefault" class="mochi-input select-input">
             <option value="">Select a Scalable Model (Dúo)</option>
             @for (m of scalableModels; track m.id) {
-              <option [value]="m.code">{{ m.name }} ({{ m.code }})</option>
+              <option [attr.value]="m.code" [selected]="editModel() === m.code">{{ m.name }} ({{ m.code }})</option>
             }
           </select>
         } @else {
