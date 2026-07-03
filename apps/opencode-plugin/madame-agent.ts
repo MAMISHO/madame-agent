@@ -11,6 +11,8 @@
  * without manual opencode.json configuration.
  */
 
+console.log("[madame-agent] Plugin loading...")
+
 import type { Plugin, ProviderHookContext } from "@opencode-ai/plugin"
 import type { Provider as ProviderV2, Model as ModelV2 } from "@opencode-ai/sdk/v2"
 import { spawn } from "child_process"
@@ -110,7 +112,7 @@ export const MadameAgent: Plugin = async (ctx) => {
   };
 
   let projectRoot = getDefaultInstallDir();
-  let port = "3001";
+  let detectedPort: string | null = null;
 
   try {
     const configPath = path.join(os.homedir(), ".config/opencode/opencode.json")
@@ -123,7 +125,7 @@ export const MadameAgent: Plugin = async (ctx) => {
       if (baseURL) {
         const match = baseURL.match(/:(\d+)/)
         if (match) {
-          port = match[1]
+          detectedPort = match[1]
         }
         const urlMatch = baseURL.match(/^(https?:\/\/[^\/:]+(:\d+)?)/)
         if (urlMatch) {
@@ -135,32 +137,93 @@ export const MadameAgent: Plugin = async (ctx) => {
     // ignore
   }
 
-  // Verify proxy is reachable (non-blocking)
-  fetch(`${PROXY_URL}/v1/models`)
-    .then((res) => res.json())
-    .then((data) => {
-      const count = data?.data?.length ?? 0
-      log(`Proxy reachable at ${PROXY_URL} (${count} models registered)`)
-    })
-    .catch(() => {
-      log(`Proxy not reachable at ${PROXY_URL} — starting madame-agent automatically on port ${port}...`)
+  const findMainJs = (): string | null => {
+    const candidates = [
+      path.join(projectRoot, "backend/dist/main.js"),
+      path.join(projectRoot, "backend/main.js"),
+      path.join(projectRoot, "dist/main.js"),
+      path.join(projectRoot, "apps/backend/dist/main.js"),
+    ]
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    return null;
+  };
 
-      // Check where main.js is located
-      let mainJs = path.join(projectRoot, "backend/main.js")
-      if (!fs.existsSync(mainJs)) {
-        mainJs = path.join(projectRoot, "apps/backend/dist/main.js")
-      }
-      if (!fs.existsSync(mainJs)) {
-        mainJs = path.join(projectRoot, "dist/main.js")
-      }
+  const isPortInUse = async (port: number): Promise<boolean> => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 500);
+      const res = await fetch(`http://localhost:${port}/v1/models`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
 
-      log(`Spawning backend from ${mainJs}`)
-      const child = spawn("node", [mainJs], {
-        cwd: projectRoot,
-        stdio: "inherit",
-        env: { ...process.env, PORT: port },
-      })
-    })
+  const findFreePort = async (startPort: number): Promise<number> => {
+    let port = startPort;
+    while (port < startPort + 100) {
+      if (!(await isPortInUse(port))) {
+        return port;
+      }
+      port++;
+    }
+    return startPort;
+  };
+
+  const startBackend = async (port: number) => {
+    const mainJs = findMainJs();
+    if (!mainJs) {
+      log(`ERROR: main.js not found in ${projectRoot}`);
+      return;
+    }
+    log(`Starting backend on port ${port} from ${mainJs}`);
+    spawn("node", [mainJs], {
+      cwd: projectRoot,
+      stdio: "inherit",
+      env: { ...process.env, PORT: String(port), MADAME_PATH: projectRoot },
+      detached: true,
+    });
+  };
+
+  const initialize = async () => {
+    const startPort = 3000;
+    let targetPort: number;
+
+    if (detectedPort) {
+      const portNum = parseInt(detectedPort, 10);
+      if (await isPortInUse(portNum)) {
+        log(`Madame Agent already running on port ${portNum}`);
+        targetPort = portNum;
+        PROXY_URL = `http://localhost:${portNum}`;
+      } else {
+        log(`Configured port ${portNum} not in use, starting backend...`);
+        targetPort = portNum;
+        await startBackend(targetPort);
+      }
+    } else {
+      for (let p = startPort; p < startPort + 20; p++) {
+        if (await isPortInUse(p)) {
+          log(`Madame Agent detected on port ${p}`);
+          targetPort = p;
+          PROXY_URL = `http://localhost:${p}`;
+          break;
+        }
+      }
+      if (!targetPort) {
+        targetPort = await findFreePort(startPort);
+        log(`No running instance found. Using free port ${targetPort}`);
+        await startBackend(targetPort);
+      }
+    }
+    log(`Backend configured at ${PROXY_URL}`);
+  };
+
+  initialize();
 
   return {
     // ─── ProviderHook: Register madame models dynamically ────────────

@@ -19,13 +19,20 @@ import configuration from './config/configuration';
     DatabaseModule,
     ServeStaticModule.forRootAsync({
       useFactory: () => {
-        const prodPath = join(__dirname, '..', 'frontend');
+        // Try environment variable first (set by install script)
+        const envPath = process.env.MADAME_PATH || process.env.HOME || '/root';
+        const configPath = join(envPath, '.local', 'share', 'madame-agent', 'frontend');
+        const configBrowserPath = join(configPath, 'browser');
+        
+        // Development paths
         const devPathInApps = join(__dirname, '..', '..', 'frontend', 'dist', 'frontend', 'browser');
         const devPathInRoot = join(__dirname, '..', 'apps', 'frontend', 'dist', 'frontend', 'browser');
         
         let rootPath = devPathInApps;
-        if (require('fs').existsSync(prodPath)) {
-          rootPath = prodPath;
+        if (require('fs').existsSync(configBrowserPath)) {
+          rootPath = configBrowserPath;
+        } else if (require('fs').existsSync(configPath)) {
+          rootPath = configPath;
         } else if (require('fs').existsSync(devPathInRoot)) {
           rootPath = devPathInRoot;
         }
@@ -34,7 +41,6 @@ import configuration from './config/configuration';
         
         return [{
           rootPath,
-          exclude: ['/v1*', '/api*'],
         }];
       }
     }),

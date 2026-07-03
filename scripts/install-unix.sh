@@ -13,6 +13,10 @@ fi
 # Asegurar que existe la carpeta de configuración de opencode
 mkdir -p "$OPENCODE_CONFIG_DIR/plugins"
 
+# Determinar directorio del proyecto (donde está este script)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # 2. Determinar puerto y verificar conflictos
 CONFIG_FILE="$OPENCODE_CONFIG_DIR/opencode.json"
 PORT="3001"
@@ -67,12 +71,44 @@ mkdir -p "$BIN_DIR"
 # 4. Limpiar instalación anterior y copiar nuevo build
 echo "Copiando archivos compilados a $INSTALL_DIR..."
 # Preservar la base de datos local si existiera por accidente en la carpeta share (aunque ahora se persistirá en ~/.madame-agent)
-rm -rf "${INSTALL_DIR:?}"/*
-cp -r dist/apps/opencode-plugin/* "$INSTALL_DIR/"
+# No borrar el backend si ya existe (puede estar montado desde el host con node_modules)
+rm -rf "${INSTALL_DIR:?}"/{dist,frontend,plugin.json,package.json,plugin.json,src,types}
+rm -rf "${INSTALL_DIR:?}"/backend/dist 2>/dev/null || true
+
+# Copiar plugin de OpenCode
+echo "Copiando plugin de OpenCode..."
+cp -r "$PROJECT_DIR/dist/apps/opencode-plugin/"* "$INSTALL_DIR/"
+
+# Copiar backend de NestJS compilado
+echo "Copiando backend de NestJS..."
+mkdir -p "$INSTALL_DIR/backend/dist"
+cp -r "$PROJECT_DIR/apps/backend/dist/"* "$INSTALL_DIR/backend/dist/"
+
+# Copiar routing.yaml para el seeding de harnesses
+echo "Copiando routing.yaml..."
+cp "$PROJECT_DIR/apps/backend/routing.yaml" "$INSTALL_DIR/backend/"
+
+# Copiar frontend compilado
+echo "Copiando frontend..."
+mkdir -p "$INSTALL_DIR/frontend"
+cp -r "$PROJECT_DIR/apps/frontend/dist/frontend/"* "$INSTALL_DIR/frontend/"
+
+# Copiar package.json del backend para poder instalar dependencias
+echo "Copiando dependencias del backend..."
+cp "$PROJECT_DIR/apps/backend/package.json" "$INSTALL_DIR/backend/"
+
+# Instalar dependencias del backend (necesario para NestJS)
+echo "Instalando dependencias del backend..."
+cd "$INSTALL_DIR/backend"
+npm install 2>&1 || npm install --include=dev 2>&1
+
+# Volver al directorio del proyecto
+cd "$PROJECT_DIR"
 
 # 5. Instalar plugin puente en OpenCode
 echo "Instalando plugin en OpenCode..."
 cp apps/opencode-plugin/madame-agent.ts "$OPENCODE_CONFIG_DIR/plugins/madame-agent.ts"
+echo "Plugin instalado: $OPENCODE_CONFIG_DIR/plugins/madame-agent.ts"
 
 # 6. Configurar opencode.json de forma segura
 CONFIG_FILE="$OPENCODE_CONFIG_DIR/opencode.json"

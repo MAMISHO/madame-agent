@@ -45,3 +45,6 @@ test/coverage/
 .nx/workspace-data
 .nx/migrate-runs
 vitest.config.*.timestamp*
+/.container-data
+/openspec
+/.opencode

@@ -83,10 +83,17 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 
 ---
 
-## Personalización de Puerto y Resiliencia
+## Detección Automática de Puerto
 
-### Cómo cambiar el puerto de Madame Agent
-Si el puerto `3001` ya está ocupado en tu máquina, puedes parametrizar un puerto diferente en tu archivo `~/.config/opencode/opencode.json` modificando el campo `baseURL` del proveedor:
+El plugin de Madame Agent incluye detección automática de puertos:
+
+1. **Si ya hay una instancia corriendo**: El plugin detecta el puerto automáticamente y usa esa instancia.
+2. **Si no hay instancia corriendo**: Busca un puerto libre a partir del 3000 y levanta el backend en ese puerto.
+3. **Puerto configurado manualmente**: Si defines `baseURL` en `opencode.json`, el plugin usa ese puerto.
+
+### Configuración Manual de Puerto (Opcional)
+
+Si deseas usar un puerto específico, edita `~/.config/opencode/opencode.json`:
 
 ```json
 {
@@ -100,8 +107,9 @@ Si el puerto `3001` ya está ocupado en tu máquina, puedes parametrizar un puer
 }
 ```
 
-El plugin leerá automáticamente este valor en el arranque e iniciará el servidor backend de Madame Agent en el nuevo puerto configurado (`3002` en este caso).
+El plugin leerá este valor al arrancar.
 
 ### Resiliencia durante la Instalación
-* Si realizas una reinstalación o actualización del monorrepo mientras Madame Agent se está ejecutando en el puerto configurado, el script de instalación detectará que el puerto está ocupado por Madame Agent (mediante una verificación interna de su estado de salud), detendrá el proceso anterior automáticamente de forma limpia y procederá con la copia de los nuevos compilados sin bloqueos de archivos.
-* Si el puerto está ocupado por una aplicación externa que no es Madame Agent, el script se detendrá mostrando un error descriptivo e indicando que debes configurar un puerto diferente antes de continuar.
+
+* Si Madame Agent ya está corriendo cuando instalas una actualización, el script detecta la instancia existente y la usa.
+* Si el puerto por defecto (3000-3019) está ocupado por otra aplicación, el plugin busca automáticamente el siguiente puerto libre.

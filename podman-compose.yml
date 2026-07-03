@@ -1,0 +1,26 @@
+# Isolated Podman Development Environment
+# Container orchestration for Madame-Agent development
+
+services:
+  madame-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: localhost/madame-dev:latest
+    container_name: madame-agent-dev
+    privileged: true
+    environment:
+      - PORT=3001
+      - NODE_ENV=development
+      # OpenCode configuration
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+      - OPENCODE_URL=${OPENCODE_URL:-http://localhost:4098}
+    ports:
+      - "4098:4098"
+      - "3001:3001"
+    volumes:
+      - .:/workspace/madame-agent
+      - ./.container-data/backend:/root/.local/share/madame-agent/backend
+    working_dir: /workspace/madame-agent
+    stdin_open: true
+    tty: true
