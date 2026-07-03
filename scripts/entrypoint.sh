@@ -146,9 +146,18 @@ EOF
 
 # Start backend on port 3001
 log "Starting backend on port 3001..."
-cd /root/.local/share/madame-agent/backend
+cd /workspace/madame-agent/apps/backend
 export MADAME_PATH="$HOME"
 export PORT=3001
+# Set global-agent proxy for outbound connections (only if proxy vars exist)
+if [ -n "${HTTPS_PROXY}" ] || [ -n "${HTTP_PROXY}" ]; then
+    export GLOBAL_AGENT_HTTP_PROXY="${HTTPS_PROXY:-${HTTP_PROXY}}"
+    export GLOBAL_AGENT_HTTPS_PROXY="${HTTPS_PROXY}"
+    export GLOBAL_AGENT_NO_PROXY="${NO_PROXY:-localhost,127.0.0.1}"
+    log "Proxy configured: ${GLOBAL_AGENT_HTTP_PROXY}"
+else
+    log "No proxy detected - using direct connections"
+fi
 nohup node dist/main.js > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 log "Backend started with PID: ${BACKEND_PID}"

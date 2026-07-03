@@ -1,6 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { json } from 'express';
 import { AppModule } from './app.module';
+import * as globalAgent from 'global-agent';
+(globalAgent as any).bootstrap();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

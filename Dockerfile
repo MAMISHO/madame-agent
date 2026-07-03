@@ -1,6 +1,10 @@
 # Isolated Podman Development Environment
 # Ubuntu 24.04 LTS with Node.js 22.x, Podman, and OpenCode CLI
 
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -23,12 +27,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && node --version
 
 # Verify Node.js version meets requirement (22.23.1+)
-# Match v22.23.x (x >= 1) or v22.24+ and v22.30+
 RUN node --version | grep -qE "^v22\.(2[3-9]|[3-9][0-9])\." || \
     (echo "ERROR: Node.js version must be 22.23.1 or higher" && exit 1)
 
 # Install Podman from GitHub releases (Kubic repos for Ubuntu 24.04 are unavailable)
-# Using static binary release: podman-remote-static-linux_amd64.tar.gz
 ENV PODMAN_VERSION=6.0.0
 RUN curl -fsSL "https://github.com/containers/podman/releases/download/v${PODMAN_VERSION}/podman-remote-static-linux_amd64.tar.gz" \
     -o /tmp/podman.tar.gz \
@@ -42,11 +44,8 @@ RUN curl -fsSL "https://github.com/containers/podman/releases/download/v${PODMAN
 RUN npm install -g opencode-ai \
     && opencode --version
 
-# Create non-root user for development (optional, for future use)
-# The container runs as root by default with --privileged mode
+# Create workspace directory
 RUN mkdir -p /workspace
-
-# Set working directory
 WORKDIR /workspace
 
 # Copy entrypoint script
@@ -55,6 +54,14 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Create OpenCode config directory
 RUN mkdir -p /root/.config/opencode
+
+# Environment variables for runtime (proxy, app config)
+ENV HTTP_PROXY=${HTTP_PROXY}
+ENV HTTPS_PROXY=${HTTPS_PROXY}
+ENV http_proxy=${HTTP_PROXY}
+ENV https_proxy=${HTTPS_PROXY}
+ENV NO_PROXY=${NO_PROXY}
+ENV no_proxy=${NO_PROXY}
 
 # Expose OpenCode CLI server port
 EXPOSE 4098

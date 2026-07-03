@@ -6,12 +6,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PROXY: ${HTTP_PROXY:-}
+        NOPROXY: ${NO_PROXY:-}
     image: localhost/madame-dev:latest
     container_name: madame-agent-dev
     privileged: true
     environment:
       - PORT=3001
       - NODE_ENV=development
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - http_proxy=${HTTP_PROXY:-}
+      - https_proxy=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-}
+      - no_proxy=${NO_PROXY:-}
       # OpenCode configuration
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - OPENCODE_URL=${OPENCODE_URL:-http://localhost:4098}
