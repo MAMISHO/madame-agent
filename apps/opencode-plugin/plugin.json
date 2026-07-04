@@ -1,6 +1,6 @@
 {
   "name": "madame-agent",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Madame-Agent — multi-agent router with cost tracking for OpenCode. Zero-config model provider with real-time cost visualization.",
   "hooks": {
     "server": "src/server.ts",
