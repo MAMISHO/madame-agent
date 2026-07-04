@@ -7,6 +7,7 @@ import * as os from "os"
 
 const MADAME_BASE_URL = "http://localhost:3001"
 let PROXY_URL = MADAME_BASE_URL
+let _backendStarted = false
 
 const STATIC_MODELS: Record<string, ModelV2> = {
   "madame-auto": {
@@ -85,6 +86,9 @@ export const MadameAgent: Plugin = async () => {
   }
 
   const initialize = async () => {
+    if (_backendStarted) return
+    _backendStarted = true
+
     for (let p = 3000; p < 3020; p++) {
       if (await isPortInUse(p)) {
         log(`Backend detected on port ${p}`)
@@ -217,4 +221,4 @@ export const MadameAgent: Plugin = async () => {
   }
 }
 
-export default MadameAgent
+
