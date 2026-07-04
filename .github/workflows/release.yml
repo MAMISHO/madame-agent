@@ -29,18 +29,8 @@ jobs:
             -C dist/apps/opencode-plugin \
             .
 
-      - name: Create Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -x
-          TAG="${{ github.ref_name }}"
-          # Check if release already exists, delete it if so
-          gh release view "$TAG" --json tagName 2>/dev/null && \
-            gh release delete "$TAG" --yes || true
-          # Create the release
-          gh release create "$TAG" \
-            /tmp/madame-agent.tar.gz \
-            --title "$TAG" \
-            --generate-notes \
-            --latest
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: /tmp/madame-agent.tar.gz
+          generate_release_notes: true
+          fail_on_unmatched_files: true
