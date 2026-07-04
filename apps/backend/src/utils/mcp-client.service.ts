@@ -24,8 +24,17 @@ export class McpClientService implements OnModuleInit, OnModuleDestroy {
   private startProcess() {
     if (this.mcpProcess) return;
 
-    // Use default path or load from opencode/config
-    const commandPath = '/Users/mamisho/dev/ia/browserlens/dist/mcpServer.js';
+    const commandPath = this.configService.get<string>('tools.browserlens.mcpPath');
+    if (!commandPath || !commandPath.trim()) {
+      this.logger.log('browserlens MCP server disabled (no path configured)');
+      return;
+    }
+
+    if (!require('fs').existsSync(commandPath)) {
+      this.logger.warn(`browserlens MCP server not found at ${commandPath}`);
+      return;
+    }
+
     const env = {
       ...process.env,
       OCR_MODEL: 'deepseek-ocr',

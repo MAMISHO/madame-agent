@@ -1,39 +1,19 @@
-# Isolated Podman Development Environment
-# Container orchestration for Madame-Agent development
-
 services:
-  madame-dev:
+  opencode-test:
     build:
       context: .
-      dockerfile: Dockerfile
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-}
-    image: localhost/madame-dev:latest
-    container_name: madam-dev
+      dockerfile: Dockerfile.opencode
+    image: localhost/opencode-madame:latest
+    container_name: opencode-test
+    network: host
     privileged: true
     environment:
-      - PORT=3001
-      - NODE_ENV=development
+      - HOME=/root
+      - PORT_OPENCODE=${PORT_OPENCODE:-4098}
+      - PORT_MADAME=${PORT_MADAME:-3001}
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
       - http_proxy=${HTTP_PROXY:-}
-      - https_proxy=${HTTP_PROXY:-}
+      - https_proxy=${HTTPS_PROXY:-}
       - NO_PROXY=${NO_PROXY:-}
       - no_proxy=${NO_PROXY:-}
-      # OpenCode configuration
-      - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
-      - OPENCODE_URL=${OPENCODE_URL:-http://localhost:4098}
-    ports:
-      - "4098:4098"
-      - "3001:3001"
-    volumes:
-      - .:/workspace/madame-agent
-      - madam-agent-data:/root/.local/share
-    working_dir: /workspace/madame-agent
-    stdin_open: true
-    tty: true
-
-volumes:
-  madam-agent-data:

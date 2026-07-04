@@ -25,6 +25,14 @@ cd "$TEMP_DIR"
 echo "Instalando dependencias de construcción..."
 npm install
 
+# 3a. Reemplazar script de instalación con versión local (corrige bugs)
+# Soporta tanto ejecución local como desde contenedor con volumen en /tmp/scripts
+SCRIPT_DIR="${MADAME_SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+if [ -f "$SCRIPT_DIR/install-unix.sh" ]; then
+    echo "Aplicando parches de corrección..."
+    cp "$SCRIPT_DIR/install-unix.sh" scripts/install-unix.sh
+fi
+
 echo "Ejecutando script de instalación..."
 chmod +x scripts/install.sh scripts/install-unix.sh
 ./scripts/install.sh "$@"

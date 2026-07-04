@@ -1,0 +1,27 @@
+# Isolated Podman Environment for Madame-Agent Testing
+services:
+  opencode-test:
+    image: docker.io/library/ubuntu:24.04
+    container_name: opencode-test
+    network: host
+    privileged: true
+    environment:
+      - HOME=/root
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - http_proxy=${HTTP_PROXY:-}
+      - https_proxy=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-}
+      - no_proxy=${NO_PROXY:-}
+    working_dir: /root
+    command: >
+      bash -c "
+        apt-get update &&
+        apt-get install -y curl wget git build-essential sudo lsof &&
+        curl -fsSL https://nodejs.org/dist/v22.23.1/node-v22.23.1-linux-x64.tar.gz | tar -xzf - -C /usr/local --strip-components=1 &&
+        curl -fsSL https://opencode.ai/install | bash &&
+        echo 'OpenCode installed. Starting on port 4098...' &&
+        /root/.opencode/bin/opencode serve --port 4098 --hostname 0.0.0.0
+      "
+    stdin_open: true
+    tty: true

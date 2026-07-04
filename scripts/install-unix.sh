@@ -56,6 +56,52 @@ fi
 
 # 3. Compilar y empaquetar el monorrepo
 echo "Compilando y empaquetando la aplicación..."
+
+# 3a. Corregir rutas hardcodeadas antes de compilar
+echo "Corrigiendo rutas hardcodeadas..."
+if [ -f "$PROJECT_DIR/apps/backend/src/utils/mcp-client.service.ts" ]; then
+    node -e "
+const fs = require('fs');
+let content = fs.readFileSync('$PROJECT_DIR/apps/backend/src/utils/mcp-client.service.ts', 'utf8');
+if (content.includes('/Users/mamisho/dev/ia/browserlens')) {
+  content = content.replace(
+    /const commandPath = '\/Users\/mamisho\/dev\/ia\/browserlens\/dist\/mcpServer\.js';/,
+    \"const commandPath = this.configService.get<string>('tools.browserlens.mcpPath');\\n    if (!commandPath || !commandPath.trim()) {\\n      this.logger.log('browserlens MCP server disabled (no path configured)');\\n      return;\\n    }\\n    if (!require('fs').existsSync(commandPath)) {\\n      this.logger.warn('browserlens MCP server not found at ' + commandPath);\\n      return;\\n    }\"
+  );
+  fs.writeFileSync('$PROJECT_DIR/apps/backend/src/utils/mcp-client.service.ts', content);
+  console.log('Patched mcp-client.service.ts');
+}
+"
+fi
+
+if [ -f "$PROJECT_DIR/apps/backend/src/tools/skill-manager.service.ts" ]; then
+    node -e "
+const fs = require('fs');
+let content = fs.readFileSync('$PROJECT_DIR/apps/backend/src/tools/skill-manager.service.ts', 'utf8');
+if (content.includes('process.cwd()')) {
+  if (!content.includes(\"import * as os from 'os'\")) {
+    content = content.replace(
+      \"import * as path from 'path';\",
+      \"import * as path from 'path';\\nimport * as os from 'os';\"
+    );
+  }
+  content = content.replace(
+    /const configuredDir = this\.configService\.get<string>\('tools\.skills\.directory', 'skills'\);[\s\S]*?this\.skillsDir = path\.resolve\(workspace, configuredDir\);/,
+    \`const configuredDir = this.configService.get<string>('tools.skills.directory');
+    if (configuredDir) {
+      this.skillsDir = path.isAbsolute(configuredDir)
+        ? configuredDir
+        : path.resolve(os.homedir(), '.madame-agent', configuredDir);
+    } else {
+      this.skillsDir = path.resolve(os.homedir(), '.madame-agent', 'skills');
+    }\`
+  );
+  fs.writeFileSync('$PROJECT_DIR/apps/backend/src/tools/skill-manager.service.ts', content);
+  console.log('Patched skill-manager.service.ts');
+}
+"
+fi
+
 npm run package
 
 # 3. Crear directorios de instalación
@@ -110,56 +156,8 @@ echo "Instalando plugin en OpenCode..."
 cp apps/opencode-plugin/madame-agent.ts "$OPENCODE_CONFIG_DIR/plugins/madame-agent.ts"
 echo "Plugin instalado: $OPENCODE_CONFIG_DIR/plugins/madame-agent.ts"
 
-# 6. Configurar opencode.json de forma segura
-CONFIG_FILE="$OPENCODE_CONFIG_DIR/opencode.json"
-if [ -f "$CONFIG_FILE" ]; then
-    TIMESTAMP=$(date +%Y%m%d%H%M%S)
-    BACKUP_FILE="${CONFIG_FILE}.bak.${TIMESTAMP}"
-    echo "Haciendo backup de opencode.json en $BACKUP_FILE..."
-    cp "$CONFIG_FILE" "$BACKUP_FILE"
-
-    echo "Actualizando configuración en opencode.json..."
-    node -e "
-const fs = require('fs');
-const path = require('path');
-const configPath = '$CONFIG_FILE';
-
-try {
-  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  if (!config.madame) config.madame = {};
-  if (!config.madame.server) config.madame.server = {};
-  config.madame.server.path = '$INSTALL_DIR';
-  
-  if (!config.provider) config.provider = {};
-  if (!config.provider['madame-agent']) {
-    config.provider['madame-agent'] = {
-      npm: '@ai-sdk/openai-compatible',
-      name: 'Madame Agent (hybrid proxy)',
-      options: {
-        baseURL: 'http://localhost:$PORT/v1'
-      },
-      models: {
-        'madame-auto': {
-          name: 'Madame Auto (Dynamic Routing)'
-        }
-      }
-    };
-  } else {
-    // Si ya existe el proveedor, actualizamos su baseURL para usar el puerto seleccionado
-    if (!config.provider['madame-agent'].options) config.provider['madame-agent'].options = {};
-    config.provider['madame-agent'].options.baseURL = 'http://localhost:$PORT/v1';
-  }
-  
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-  console.log('opencode.json actualizado correctamente.');
-} catch (err) {
-  console.error('Error al actualizar opencode.json:', err.message);
-  process.exit(1);
-}
-"
-else
-    echo "WARNING: No se encontró opencode.json en $CONFIG_FILE. La configuración no se pudo inicializar."
-fi
+# 6. Los plugins en ~/.config/opencode/plugins/ se cargan automáticamente
+# No es necesario modificar la configuración
 
 echo ""
 echo "=== Instalación de Madame Agent completada con éxito ==="

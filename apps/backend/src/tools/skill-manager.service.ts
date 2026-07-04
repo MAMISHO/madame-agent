@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { ToolRegistryService } from './tool-registry.service';
 
@@ -32,9 +33,14 @@ export class SkillManagerService implements OnModuleInit {
     private configService: ConfigService,
     private toolRegistry: ToolRegistryService,
   ) {
-    const workspace = this.configService.get<string>('tools.sandbox.workspace') || process.cwd();
-    const configuredDir = this.configService.get<string>('tools.skills.directory', 'skills');
-    this.skillsDir = path.resolve(workspace, configuredDir);
+    const configuredDir = this.configService.get<string>('tools.skills.directory');
+    if (configuredDir) {
+      this.skillsDir = path.isAbsolute(configuredDir) 
+        ? configuredDir 
+        : path.resolve(os.homedir(), '.madame-agent', configuredDir);
+    } else {
+      this.skillsDir = path.resolve(os.homedir(), '.madame-agent', 'skills');
+    }
   }
 
   async onModuleInit() {
