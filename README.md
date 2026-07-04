@@ -9,7 +9,6 @@ Madame Agent es un monorrepo que proporciona un proxy híbrido (backend NestJS, 
 Antes de instalar Madame Agent, asegúrate de tener instalados los siguientes componentes:
 1. **Node.js** (v18 o superior) y **npm** (que incluye `npx`).
 2. **OpenCode** (el IDE o servidor de terminal `opencode`). Debes haberlo iniciado al menos una vez para que se cree su estructura de configuración inicial.
-3. **Git** (para descargar y actualizar el repositorio).
 
 ## Instalación Rápida (Un Solo Paso)
 
@@ -23,13 +22,16 @@ curl -fsSL https://raw.githubusercontent.com/MAMISHO/madame-agent/main/scripts/b
 
 # Si el puerto 3001 está ocupado, puedes indicar otro puerto (por ejemplo, el 3002):
 curl -fsSL https://raw.githubusercontent.com/MAMISHO/madame-agent/main/scripts/bootstrap.sh | bash -s -- --port 3002
+
+# Para instalar una versión específica (por defecto: latest):
+MADAME_VERSION=v1.0.0 curl -fsSL https://raw.githubusercontent.com/MAMISHO/madame-agent/main/scripts/bootstrap.sh | bash
 ```
 
 ---
 
-## Instalación Paso a Paso (Modo Manual)
+## Instalación desde Código Fuente (Desarrollo)
 
-Para descargar e instalar el plugin y el backend de forma completamente automatizada en tu sistema, ejecuta el siguiente bloque de comandos en tu terminal:
+Si querés contribuir o inspeccionar el código antes de instalar, cloná el repositorio y ejecutá el instalador local:
 
 ### macOS / Linux
 
@@ -38,10 +40,11 @@ Para descargar e instalar el plugin y el backend de forma completamente automati
 git clone https://github.com/MAMISHO/madame-agent.git
 cd madame-agent
 
-# 2. Instalar dependencias globales del monorrepo
+# 2. Instalar dependencias y compilar
 npm install
+npm run package
 
-# 3. Lanzar el script de instalación automática
+# 3. Instalar
 chmod +x scripts/install.sh scripts/install-unix.sh
 ./scripts/install.sh
 ```
@@ -53,10 +56,11 @@ chmod +x scripts/install.sh scripts/install-unix.sh
 git clone https://github.com/MAMISHO/madame-agent.git
 cd madame-agent
 
-# 2. Instalar dependencias globales del monorrepo
+# 2. Instalar dependencias y compilar
 npm install
+npm run package
 
-# 3. Lanzar el script de instalación automática
+# 3. Instalar
 Set-ExecutionPolicy Bypass -Scope Process -Force
 .\scripts\install.sh
 ```
@@ -65,14 +69,25 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 
 ## ¿Qué hace el Script de Instalación?
 
-1. **Verificación de Entorno**: Comprueba que tienes instalados Node.js, npm, npx y OpenCode.
-2. **Compilación y Empaquetado**: Compila la interfaz de Angular, el servidor NestJS y el plugin en TypeScript, ensamblando un build autocontenido en la carpeta `dist/apps/opencode-plugin`.
-3. **Directorio de Distribución**: Copia el build completo al directorio de usuario del sistema (independiente de tu carpeta de desarrollo/repositorio):
-   - **macOS / Linux**: `$HOME/.local/share/madame-agent/`
-   - **Windows**: `%LOCALAPPDATA%\madame-agent\`
-4. **Persistencia de Datos**: Crea la carpeta `$HOME/.madame-agent/` donde se persistirá de forma segura tu base de datos SQLite (`madame-agent.sqlite`), evitando pérdida de arneses al actualizar el código.
-5. **Instalación del Plugin**: Instala el script puente `madame-agent.ts` en `~/.config/opencode/plugins/madame-agent.ts`.
-6. **Configuración Automática**: Realiza una copia de seguridad con fecha y hora de tu `opencode.json` y actualiza la configuración para registrar el proveedor `madame-agent` y el path del backend dinámicamente.
+### Bootstrap (recomendado — `bootstrap.sh`)
+
+1. **Descarga desde GitHub Release**: Obtiene el tarball precompilado más reciente (`madame-agent.tar.gz`) desde [GitHub Releases](https://github.com/MAMISHO/madame-agent/releases). Sin clonar, sin compilar.
+2. **Extracción**: Descomprime el build completo en `$HOME/.local/share/madame-agent/`.
+3. **Dependencias de Producción**: Instala solo las dependencias runtime del backend Sequelize, SQLite, NestJS (`npm install --production`).
+4. **Plugin Bridge**: Copia `madame-agent.ts` a `~/.config/opencode/plugins/madame-agent.ts`.
+5. **Persistencia de Datos**: Crea `$HOME/.madame-agent/` para la base de datos SQLite.
+
+**Tiempo estimado**: ~15-20 segundos (vs 2-5 minutos con el método anterior).
+
+> **¿Sin release disponible?** El script detecta automáticamente la ausencia de releases y cae al método tradicional de clonar, compilar e instalar.
+
+### Instalación desde fuente — `install.sh`
+
+1. **Verificación de Entorno**: Comprueba Node.js, npm, npx y OpenCode.
+2. **Compilación**: Compila Angular, NestJS y el plugin TypeScript en `dist/apps/opencode-plugin`.
+3. **Directorio de Distribución**: Copia el build a `$HOME/.local/share/madame-agent/`.
+4. **Plugin Bridge**: Copia `madame-agent.ts` a `~/.config/opencode/plugins/madame-agent.ts`.
+5. **Persistencia de Datos**: Crea `$HOME/.madame-agent/` para la base de datos.
 
 ---
 
