@@ -186,7 +186,7 @@ tools:
   max_iterations: 40
   global_timeout_ms: -1
   sandbox:
-    workspace: /Users/mamisho/dev/madame-agent
+    workspace: ${MADAME_WORKSPACE:-.}
     allowed_paths:
       - ~/.config/opencode/plugins/
     denied_commands:
