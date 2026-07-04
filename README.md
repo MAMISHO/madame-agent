@@ -113,3 +113,33 @@ El plugin leerá este valor al arrancar.
 
 * Si Madame Agent ya está corriendo cuando instalas una actualización, el script detecta la instancia existente y la usa.
 * Si el puerto por defecto (3000-3019) está ocupado por otra aplicación, el plugin busca automáticamente el siguiente puerto libre.
+
+---
+
+## Desinstalación
+
+Para desinstalar Madame Agent completamente de tu sistema, ejecuta el script de desinstalación correspondiente a tu sistema operativo.
+
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MAMISHO/madame-agent/main/scripts/uninstall.sh | bash
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/MAMISHO/madame-agent/main/scripts/uninstall-windows.ps1 | iex
+```
+
+### ¿Qué elimina el script de desinstalación?
+
+El script de desinstalación elimina los siguientes archivos y directorios:
+
+| Plataforma | Ruta |
+|------------|------|
+| Plugin OpenCode | `~/.config/opencode/plugins/madame-agent.ts` |
+| Instalación | `~/.local/share/madame-agent/` |
+| Datos persistentes | `~/.madame-agent/` |
+
+**Nota**: El script de desinstalación también detiene cualquier proceso de Madame Agent que esté corriendo en el puerto 3001 (o el puerto configurado mediante la variable `MADAME_PORT`).
