@@ -62,6 +62,18 @@ if (fs.existsSync(backendRouting)) {
   fs.copyFileSync(backendRouting, path.join(outputDir, 'backend/routing.yaml'));
 }
 
+// 4b. Copy backend package.json for npm install --production at destination
+const backendPkg = path.resolve(workspaceRoot, 'apps/backend/package.json');
+if (fs.existsSync(backendPkg)) {
+  fs.copyFileSync(backendPkg, path.join(outputDir, 'backend/package.json'));
+}
+
+// 4c. Copy madame-agent.ts plugin bridge
+const pluginBridge = path.join(pluginRoot, 'madame-agent.ts');
+if (fs.existsSync(pluginBridge)) {
+  fs.copyFileSync(pluginBridge, path.join(outputDir, 'madame-agent.ts'));
+}
+
 // 5. Copy frontend dist
 const frontendDist = path.resolve(workspaceRoot, 'apps/frontend/dist/frontend/browser');
 if (fs.existsSync(frontendDist)) {

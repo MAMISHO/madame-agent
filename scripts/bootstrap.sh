@@ -105,10 +105,10 @@ try_release_install() {
     return 1
   }
 
-  # Quick sanity check — the file should be > 1MB
+  # Quick sanity check — the file should be > 10KB (anything smaller is an HTML error page)
   local tar_size
   tar_size=$(stat -f%z "$TEMP_TAR" 2>/dev/null || stat -c%s "$TEMP_TAR" 2>/dev/null || echo "0")
-  if [ "$tar_size" -lt 1000000 ]; then
+  if [ "$tar_size" -lt 10000 ]; then
     echo "  ↳ El archivo descargado parece inválido (tamaño: $tar_size bytes)."
     rm -f "$TEMP_TAR"
     rm -rf "$TEMP_EXTRACT"
