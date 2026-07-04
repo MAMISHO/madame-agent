@@ -33,7 +33,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" \
+          set -x
+          TAG="${{ github.ref_name }}"
+          # Check if release already exists, delete it if so
+          gh release view "$TAG" --json tagName 2>/dev/null && \
+            gh release delete "$TAG" --yes || true
+          # Create the release
+          gh release create "$TAG" \
             /tmp/madame-agent.tar.gz \
-            --title "${{ github.ref_name }}" \
-            --generate-notes
+            --title "$TAG" \
+            --generate-notes \
+            --latest
