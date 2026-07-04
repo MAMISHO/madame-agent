@@ -4,6 +4,7 @@ ENV PORT_OPENCODE=4098
 ENV MADAME_PORT=3001
 ENV NODE_VERSION=22.23.1
 ENV HOME=/root
+ENV PATH="/root/.opencode/bin:${PATH}"
 
 RUN apt-get update && \
     apt-get install -y curl wget git build-essential sudo lsof && \
@@ -12,9 +13,8 @@ RUN apt-get update && \
     curl -fsSL https://opencode.ai/install | bash && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-COPY scripts/entrypoint-uninstall-test.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
 WORKDIR /root
 
-ENTRYPOINT ["/entrypoint.sh"]
+RUN curl -fsSL https://raw.githubusercontent.com/MAMISHO/madame-agent/main/scripts/bootstrap.sh | bash
+
+CMD ["opencode", "serve", "--port", "4098", "--hostname", "0.0.0.0"]

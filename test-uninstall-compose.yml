@@ -9,6 +9,7 @@ services:
     privileged: true
     environment:
       - HOME=/root
+      - PATH=/root/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - PORT_OPENCODE=4098
       - MADAME_PORT=3001
     restart: "no"
