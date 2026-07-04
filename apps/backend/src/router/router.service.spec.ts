@@ -468,4 +468,69 @@ describe('RouterService', () => {
       expect(routeSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'local_small' }));
     });
   });
+
+  describe('routingGate', () => {
+    const createRequest = (agentMode: string, userMessage: string): ChatCompletionRequest => ({
+      model: 'test-model',
+      messages: [{ role: 'user', content: userMessage }],
+      metadata: { opencodeAgentMode: agentMode as any },
+    });
+
+    it('should route plan mode to planner-only', () => {
+      const request = createRequest('plan', 'plan the migration');
+      const result = routerService.routingGate(request);
+
+      expect(result.mode).toBe('planner-only');
+      expect(result.shouldExecuteFullPipeline).toBe(false);
+      expect(result.skipOllamaCheck).toBe(true);
+    });
+
+    it('should route build mode with simple query to direct', () => {
+      const request = createRequest('build', 'What is 2+2?');
+      const result = routerService.routingGate(request);
+
+      expect(result.mode).toBe('direct');
+      expect(result.shouldExecuteFullPipeline).toBe(false);
+      expect(result.skipOllamaCheck).toBe(true);
+      expect(result.complexityHint).toBe('simple');
+    });
+
+    it('should route build mode with task keywords to orchestrator', () => {
+      const request = createRequest('build', 'crear una nueva función de autenticación');
+      const result = routerService.routingGate(request);
+
+      expect(result.mode).toBe('orchestrator');
+      expect(result.shouldExecuteFullPipeline).toBe(true);
+      expect(result.complexityHint).toBe('complex');
+    });
+
+    it('should route build mode with long query to orchestrator', () => {
+      const longTask = 'Implement a complete user authentication system with JWT tokens, refresh token rotation, password hashing, and rate limiting for the login endpoint';
+      const request = createRequest('build', longTask);
+      const result = routerService.routingGate(request);
+
+      expect(result.mode).toBe('orchestrator');
+      expect(result.shouldExecuteFullPipeline).toBe(true);
+      expect(result.complexityHint).toBe('complex');
+    });
+
+    it('should route madame-agent mode to full pipeline', () => {
+      const request = createRequest('madame-agent', 'What is 2+2?');
+      const result = routerService.routingGate(request);
+
+      expect(result.mode).toBe('orchestrator');
+      expect(result.shouldExecuteFullPipeline).toBe(true);
+    });
+
+    it('should default to build mode when no agent mode specified', () => {
+      const request: ChatCompletionRequest = {
+        model: 'test-model',
+        messages: [{ role: 'user', content: 'What is 2+2?' }],
+      };
+      const result = routerService.routingGate(request);
+
+      expect(result.mode).toBe('direct');
+      expect(result.shouldExecuteFullPipeline).toBe(false);
+    });
+  });
 });

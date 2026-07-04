@@ -1,8 +1,8 @@
-import { Component, Input, Output, EventEmitter, inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject, OnInit, OnDestroy, signal } from '@angular/core';
 import { Harness } from '../../domain/harness.model';
 import { Actions, ofType } from '@ngrx/effects';
 import { Subscription } from 'rxjs';
-import { createHarnessSuccess, createHarnessFailure } from '../store/harness.actions';
+import { createHarnessSuccess, createHarnessFailure, makeHarnessActiveSuccess, makeHarnessActiveFailure } from '../store/harness.actions';
 @Component({
   selector: 'app-harness-list',
   standalone: true,
@@ -25,6 +25,7 @@ export class HarnessListComponent {
   newCode = '';
   newName = '';
   cloneFromId = '';
+  togglingHarnessId = signal<string | null>(null);
 
   private actions$ = inject(Actions);
   private sub!: Subscription;
@@ -35,11 +36,14 @@ export class HarnessListComponent {
 
   ngOnInit() {
     this.sub = this.actions$.pipe(
-      ofType(createHarnessSuccess, createHarnessFailure)
+      ofType(createHarnessSuccess, createHarnessFailure, makeHarnessActiveSuccess, makeHarnessActiveFailure)
     ).subscribe((action) => {
       this.isSaving = false;
       if (action.type === createHarnessSuccess.type) {
         this.closeModal();
+      }
+      if (action.type === makeHarnessActiveSuccess.type || action.type === makeHarnessActiveFailure.type) {
+        this.togglingHarnessId.set(null);
       }
     });
   }
@@ -73,5 +77,10 @@ export class HarnessListComponent {
       name: this.newName.trim(),
       cloneFromHarnessId: this.cloneFromId || undefined
     });
+  }
+
+  onActivate(harness: Harness) {
+    this.togglingHarnessId.set(harness.id);
+    this.activateHarness.emit(harness);
   }
 }

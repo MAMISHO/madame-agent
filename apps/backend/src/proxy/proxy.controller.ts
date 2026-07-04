@@ -214,6 +214,12 @@ export class ProxyController {
       }
     }
 
+    // Extract agent mode from plugin header (overrides JSON detection)
+    const headerAgentMode = req.headers['x-madame-agent-mode'] as string | undefined;
+    if (headerAgentMode) {
+      opencodeAgent = headerAgentMode;
+    }
+
     body.metadata = {
       ...body.metadata,
       harness: harness ? (typeof harness === 'string' ? harness : String(harness)) : undefined,

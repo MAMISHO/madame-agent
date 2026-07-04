@@ -3,6 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { ModelResolverService } from './model-resolver.service';
 import { ClassifierService } from '../classifier/classifier.service';
 import { ConfidenceEngineService } from '../confidence/confidence.service';
+import { HarnessEntity } from '../core/infra/database/entities/harness.entity';
+import { AgentEntity } from '../core/infra/database/entities/agent.entity';
+import { ModelEntity } from '../core/infra/database/entities/model.entity';
+import { ProviderEntity } from '../core/infra/database/entities/provider.entity';
+
+jest.mock('../core/infra/database/entities/harness.entity');
+jest.mock('../core/infra/database/entities/agent.entity');
+jest.mock('../core/infra/database/entities/model.entity');
+jest.mock('../core/infra/database/entities/provider.entity');
 
 describe('ModelResolverService', () => {
   let service: ModelResolverService;
@@ -179,6 +188,48 @@ describe('ModelResolverService', () => {
       const pair = service.getOrchestratorPair('gemini-orchestrator');
       expect(pair).toBeDefined();
       expect(pair.orchestrator).toBe('cloud_gemini');
+    });
+  });
+
+  describe('needsLocalModels', () => {
+    beforeEach(() => {
+      (HarnessEntity.findOne as jest.Mock).mockReset();
+      (AgentEntity.findAll as jest.Mock).mockReset();
+    });
+
+    it('should return true if harness not found', async () => {
+      (HarnessEntity.findOne as jest.Mock).mockResolvedValue(null);
+      
+      const result = await service.needsLocalModels('nonexistent-harness');
+      expect(result).toBe(true);
+    });
+
+    it('should return true if any agent uses local provider', async () => {
+      (HarnessEntity.findOne as jest.Mock).mockResolvedValue({ id: 'h1', code: 'local-harness' });
+      (AgentEntity.findAll as jest.Mock).mockResolvedValue([
+        { 
+          model: { 
+            provider: { code: 'ollama' } 
+          } 
+        }
+      ]);
+      
+      const result = await service.needsLocalModels('local-harness');
+      expect(result).toBe(true);
+    });
+
+    it('should return false for cloud-only harness', async () => {
+      (HarnessEntity.findOne as jest.Mock).mockResolvedValue({ id: 'h2', code: 'cloud-harness' });
+      (AgentEntity.findAll as jest.Mock).mockResolvedValue([
+        { 
+          model: { 
+            provider: { code: 'openai' } 
+          } 
+        }
+      ]);
+      
+      const result = await service.needsLocalModels('cloud-harness');
+      expect(result).toBe(false);
     });
   });
 });

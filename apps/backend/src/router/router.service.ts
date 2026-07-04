@@ -29,6 +29,18 @@ export interface RouteMetadata {
   toolErrors?: string[];
   iterations?: number;
   outputTokens?: number;
+  complexityHint?: 'simple' | 'complex';
+  skipOllamaCheck?: boolean;
+  opencodeAgentMode?: 'build' | 'plan' | 'madame-agent';
+}
+
+export type RoutingMode = 'direct' | 'orchestrator' | 'planner-only';
+
+export interface RoutingGateResult {
+  mode: RoutingMode;
+  skipOllamaCheck: boolean;
+  complexityHint?: 'simple' | 'complex';
+  shouldExecuteFullPipeline: boolean;
 }
 
 export interface RouteResult {
@@ -373,6 +385,28 @@ export class RouterService implements OnModuleInit {
     if (request.model) {
       const orchestratorPair = await this.modelResolverService.getOrchestratorPair(request.model);
       if (orchestratorPair) {
+        // Apply smart routing gate
+        const gateResult = this.routingGate(request, orchestratorPair);
+        
+        // If mode is 'direct' (simple query in build mode), respond directly
+        if (gateResult.mode === 'direct') {
+          this.logger.log(`[Router] Simple query detected, routing directly without orchestrator`);
+          const resolved = await this.modelResolverService.resolveModel(
+            orchestratorPair.orchestrator,
+            request.messages,
+          );
+          return this.callProviderDirect(request, resolved.config);
+        }
+        
+        // If mode is 'planner-only', delegate to orchestrator with plan mode
+        if (gateResult.mode === 'planner-only') {
+          this.logger.log(`[Router] Plan mode, delegating to planner only`);
+          (request.metadata = request.metadata || {}).opencodeAgentMode = 'plan';
+        }
+        
+        // Store routing decision in metadata for ensureOllamaReady
+        (request.metadata = request.metadata || {}).skipOllamaCheck = gateResult.skipOllamaCheck;
+        
         return this.routeThroughOrchestrator(request, providersConfig, orchestratorPair);
       }
     }
@@ -519,6 +553,133 @@ export class RouterService implements OnModuleInit {
     pair: { id: string; name: string; orchestrator: string; subagents: string[] },
   ): Promise<RouteResult> {
     return this.workflowService.executeWorkflow(request, pair);
+  }
+
+  /**
+   * Direct provider call for simple queries that don't need the full orchestrator pipeline.
+   */
+  private async callProviderDirect(
+    request: ChatCompletionRequest,
+    modelConfig: any,
+  ): Promise<RouteResult> {
+    const originalTokens = this.estimateTokens(request.messages);
+    const processed = this.contextService.process(request.messages, {
+      maxTokens: this.resolveContextLimit(modelConfig),
+    });
+    request.messages = processed.messages;
+
+    const metadata: RouteMetadata = {
+      mode: 'direct',
+      complexityHint: 'simple',
+      skipOllamaCheck: true,
+      escalated: false,
+      providerKey: modelConfig.provider || 'direct',
+      providerType: modelConfig.type,
+      model: modelConfig.model,
+      originalTokens,
+      finalTokens: this.estimateTokens(request.messages),
+      iterations: 0,
+    };
+
+    const { response, toolCalls, iterations, toolErrors } = await this.callWithRoutingMetadata(
+      () => this.callProviderOrToolLoop(request, modelConfig),
+      metadata,
+    );
+
+    return { response, metadata: { ...metadata, toolCalls, iterations, toolErrors } };
+  }
+
+  /**
+   * Smart routing gate that decides the execution path based on OpenCode agent mode
+   * and query complexity.
+   * 
+   * Flow:
+   * - mode=plan → planner-only (direct orchestrator call, no full pipeline)
+   * - mode=build + simple → direct response (no agents)
+   * - mode=build + complex → full pipeline
+   * - mode=madame-agent → forced full pipeline
+   */
+  routingGate(request: ChatCompletionRequest, orchestratorPair?: { id: string; name: string; orchestrator: string; subagents: string[] }): RoutingGateResult {
+    const opencodeAgentMode = (request.metadata as any)?.opencodeAgentMode || 'build';
+    
+    // Default to full pipeline for backward compatibility
+    const result: RoutingGateResult = {
+      mode: 'orchestrator',
+      skipOllamaCheck: false,
+      complexityHint: 'complex',
+      shouldExecuteFullPipeline: true,
+    };
+
+    switch (opencodeAgentMode) {
+      case 'plan':
+        // Plan mode: use planner only, skip full pipeline
+        result.mode = 'planner-only';
+        result.shouldExecuteFullPipeline = false;
+        result.skipOllamaCheck = true;
+        this.logger.log(`[RoutingGate] mode=plan → planner-only`);
+        break;
+
+      case 'madame-agent':
+        // Madame-agent mode: force full pipeline
+        result.mode = 'orchestrator';
+        result.shouldExecuteFullPipeline = true;
+        this.logger.log(`[RoutingGate] mode=madame-agent → full pipeline`);
+        break;
+
+      case 'build':
+      default:
+        // Build mode: use complexity heuristic
+        const isSimple = this.isSimpleQuery(request);
+        result.complexityHint = isSimple ? 'simple' : 'complex';
+        result.shouldExecuteFullPipeline = !isSimple;
+        
+        if (isSimple) {
+          result.mode = 'direct';
+          result.skipOllamaCheck = true;
+          this.logger.log(`[RoutingGate] mode=build + simple → direct response`);
+        } else {
+          result.mode = 'orchestrator';
+          this.logger.log(`[RoutingGate] mode=build + complex → full pipeline`);
+        }
+        break;
+    }
+
+    return result;
+  }
+
+  /**
+   * Heuristic to determine if a query is simple (can be answered directly)
+   * or complex (requires full pipeline).
+   */
+  private isSimpleQuery(request: ChatCompletionRequest): boolean {
+    const userMessage = this.lastUserMessage(request.messages);
+    if (!userMessage) return false;
+
+    // Short queries are likely simple questions
+    if (userMessage.length < 50) {
+      // But check for task keywords
+      const taskKeywords = ['crear', 'implementar', 'construir', 'modificar', 'escribir', 'desarrollar', 'crear', 'diseñar', 'hacer', 'build', 'create', 'implement', 'develop', 'modify', 'write'];
+      const hasTaskKeyword = taskKeywords.some(kw => userMessage.toLowerCase().includes(kw));
+      if (hasTaskKeyword) return false;
+      return true;
+    }
+
+    // Longer queries with task keywords are complex
+    const taskKeywords = ['crear', 'implementar', 'construir', 'modificar', 'escribir', 'desarrollar', 'crear', 'diseñar', 'hacer', 'build', 'create', 'implement', 'develop', 'modify', 'write'];
+    const hasTaskKeyword = taskKeywords.some(kw => userMessage.toLowerCase().includes(kw));
+    
+    return !hasTaskKeyword;
+  }
+
+  private lastUserMessage(messages: any[]): string {
+    if (!messages || messages.length === 0) return '';
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        const content = messages[i].content;
+        return typeof content === 'string' ? content : JSON.stringify(content);
+      }
+    }
+    return '';
   }
 
   private resolveContextLimit(modelConfig: any): number | undefined {

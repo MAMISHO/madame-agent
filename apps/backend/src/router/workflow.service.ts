@@ -110,7 +110,11 @@ export class WorkflowService {
       this.registerCustomDelegationTool(request.metadata, pair, parentRequestId, () => preparerText);
 
       // 1.5. Ollama Lifecycle Check (deterministic, not LLM-dependent)
-      await this.ensureOllamaReady(parentRequestId, request, pair);
+      const skipOllama = (request.metadata as any)?.skipOllamaCheck || false;
+      await this.ensureOllamaReady(parentRequestId, request, pair, {
+        skipOllamaCheck: skipOllama,
+        harnessCode: pair.id,
+      });
 
       // 2. Environment Preparer Agent - Only run if state is NEW
       if (session.state === 'NEW') {
@@ -719,12 +723,28 @@ ${scraped.content}
     parentRequestId: string,
     request: ChatCompletionRequest,
     pair: { id: string; name: string; orchestrator: string; subagents: string[] },
+    options?: { skipOllamaCheck?: boolean; harnessCode?: string },
   ): Promise<void> {
+    // If explicitly told to skip, respect that
+    if (options?.skipOllamaCheck) {
+      this.agentLogger.log('System', 'Ollama check explicitly skipped (cloud-only harness or simple query).', parentRequestId);
+      return;
+    }
+
     // If we are in plan mode, we don't need Ollama subagents yet
     const isPlanMode = request.metadata?.opencodeAgent === 'plan';
     if (isPlanMode) {
       this.agentLogger.log('System', 'Workflow is in planning mode (agent: plan). Skipping Ollama lifecycle check.', parentRequestId);
       return;
+    }
+
+    // Check if harness is cloud-only using needsLocalModels
+    if (options?.harnessCode) {
+      const needsLocal = await this.modelResolverService.needsLocalModels(options.harnessCode);
+      if (!needsLocal) {
+        this.agentLogger.log('System', `Harness "${options.harnessCode}" is cloud-only. Skipping Ollama lifecycle check.`, parentRequestId);
+        return;
+      }
     }
 
     // Check if any subagent in this pair uses Ollama

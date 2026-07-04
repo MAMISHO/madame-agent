@@ -70,7 +70,12 @@
             </div>
             <div class="harness-actions">
               @if (!h.isActive) {
-                <button (click)="activateHarness.emit(h); $event.stopPropagation()" class="harness-btn activate-btn">Activate</button>
+                <button (click)="onActivate(h); $event.stopPropagation()" class="harness-btn activate-btn" [disabled]="togglingHarnessId() === h.id">
+                  @if (togglingHarnessId() === h.id) {
+                    <span class="spinner" style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; display: inline-block; animation: spin 1s linear infinite;"></span>
+                  }
+                  Activate
+                </button>
               }
               @if (!h.isDefault) {
                 <button (click)="deleteHarness.emit(h); $event.stopPropagation()" class="harness-btn delete-btn">Delete</button>

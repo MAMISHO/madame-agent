@@ -338,4 +338,45 @@ export class ModelResolverService {
     }
     return providerConfig;
   }
+
+  /**
+   * Checks if a harness needs local models (Ollama) or can operate purely on cloud.
+   * Returns true if at least one agent uses a local provider.
+   */
+  async needsLocalModels(harnessCode: string): Promise<boolean> {
+    const dbHarness = await HarnessEntity.findOne({ where: { code: harnessCode } }) ||
+                       await HarnessEntity.findOne({ where: { id: harnessCode } });
+    if (!dbHarness) {
+      this.logger.warn(`[ModelResolver] Harness "${harnessCode}" not found, defaulting to needs local models`);
+      return true; // Default to checking Ollama if harness not found
+    }
+
+    const agents = await AgentEntity.findAll({
+      where: { harnessId: dbHarness.id },
+      include: [{
+        model: ModelEntity,
+        include: [ProviderEntity]
+      }]
+    });
+
+    // If no agents found, assume local models might be needed
+    if (!agents || agents.length === 0) {
+      return true;
+    }
+
+    // Check if any agent uses a local (non-cloud) provider
+    for (const agent of agents) {
+      if (agent.model?.provider) {
+        const providerCode = agent.model.provider.code.toLowerCase();
+        const isCloud = ['openai', 'gemini', 'nvidia', 'anthropic', 'cloud', 'eecc-jrc', 'jrc'].includes(providerCode);
+        if (!isCloud) {
+          this.logger.log(`[ModelResolver] Harness "${harnessCode}" needs local models (agent uses: ${providerCode})`);
+          return true;
+        }
+      }
+    }
+
+    this.logger.log(`[ModelResolver] Harness "${harnessCode}" is cloud-only, skipping Ollama check`);
+    return false;
+  }
 }
