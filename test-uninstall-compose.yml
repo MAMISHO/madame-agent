@@ -1,0 +1,14 @@
+services:
+  opencode-madame:
+    build:
+      context: .
+      dockerfile: Dockerfile.uninstall-test
+    image: localhost/opencode-uninstall-test:latest
+    container_name: opencode-uninstall-test
+    network_mode: host
+    privileged: true
+    environment:
+      - HOME=/root
+      - PORT_OPENCODE=4098
+      - MADAME_PORT=3001
+    restart: "no"
