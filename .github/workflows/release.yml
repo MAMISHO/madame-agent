@@ -29,17 +29,9 @@ jobs:
             -C dist/apps/opencode-plugin \
             .
 
-      - name: Create Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          TAG="${{ github.ref_name }}"
-          # Remove existing release + tag for this ref (from failed runs)
-          gh release delete "$TAG" --yes 2>/dev/null || true
-          git tag -d "$TAG" 2>/dev/null || true
-          # Create fresh release
-          gh release create "$TAG" \
-            /tmp/madame-agent.tar.gz \
-            --title "$TAG" \
-            --generate-notes
+      - uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: /tmp/madame-agent.tar.gz
+          generateReleaseNotes: true
+          skipIfReleaseExists: false
