@@ -85,6 +85,26 @@ export const MadameAgent: Plugin = async () => {
     return true
   }
 
+  const waitForBackend = async (port: number, timeoutMs = 30000): Promise<boolean> => {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const res = await fetch(`http://localhost:${port}/v1/health`, {
+          signal: AbortSignal.timeout(2000),
+        })
+        if (res.ok) {
+          log(`Backend ready on port ${port}`)
+          return true
+        }
+      } catch {
+        // Not ready yet
+      }
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+    log(`WARNING: Backend did not become ready within ${timeoutMs / 1000}s`)
+    return false
+  }
+
   const initialize = async () => {
     if (_backendStarted) return
     _backendStarted = true
@@ -103,6 +123,7 @@ export const MadameAgent: Plugin = async () => {
     }
 
     await startBackend(3001)
+    await waitForBackend(3001)
     log(`Backend configured at ${PROXY_URL}`)
   }
 

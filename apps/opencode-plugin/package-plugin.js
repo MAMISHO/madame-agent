@@ -59,7 +59,8 @@ if (fs.existsSync(backendDist)) {
 
 const backendRouting = path.resolve(workspaceRoot, 'apps/backend/routing.yaml');
 if (fs.existsSync(backendRouting)) {
-  fs.copyFileSync(backendRouting, path.join(outputDir, 'backend/routing.yaml'));
+  // Copy to root of output — backend config resolves routing.yaml relative to cwd
+  fs.copyFileSync(backendRouting, path.join(outputDir, 'routing.yaml'));
 }
 
 // 4b. Copy backend package.json for npm install --production at destination
