@@ -3,6 +3,7 @@ import type { Model as ModelV2 } from "@opencode-ai/sdk/v2"
 import { spawn } from "child_process"
 import * as fs from "fs"
 import * as http from "http"
+import * as net from "net"
 import * as path from "path"
 import * as os from "os"
 
@@ -110,7 +111,7 @@ async function fetchModelsFromBackend(): Promise<Record<string, ModelV2> | null>
   }
 }
 
-async function findExistingServer(portFilePath: string): Promise<number | null> {
+export async function findExistingServer(portFilePath: string): Promise<number | null> {
   try {
     if (!fs.existsSync(portFilePath)) return null
     const port = parseInt(fs.readFileSync(portFilePath, "utf-8").trim(), 10)
@@ -122,6 +123,29 @@ async function findExistingServer(portFilePath: string): Promise<number | null> 
     return null
   } catch {
     return null
+  }
+}
+
+export const isPortAvailable = async (port: number): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const server = net.createServer()
+    server.once("error", () => resolve(false))
+    server.once("listening", () => {
+      server.close()
+      resolve(true)
+    })
+    server.listen(port, "127.0.0.1")
+  })
+}
+
+export const isBackendHealthy = async (port: number): Promise<boolean> => {
+  try {
+    const res = await fetch(`http://localhost:${port}/v1/health`, {
+      signal: AbortSignal.timeout(1000),
+    })
+    return res.ok
+  } catch {
+    return false
   }
 }
 
@@ -224,17 +248,6 @@ export const MadameAgent: Plugin = async (input: any) => {
     return null
   }
 
-  const isPortInUse = async (port: number): Promise<boolean> => {
-    try {
-      const res = await fetch(`http://localhost:${port}/v1/health`, {
-        signal: AbortSignal.timeout(1000),
-      })
-      return res.ok
-    } catch {
-      return false
-    }
-  }
-
   const startBackend = async (port: number) => {
     const mainJs = findMainJs()
     if (!mainJs) {
@@ -281,41 +294,30 @@ export const MadameAgent: Plugin = async (input: any) => {
     if (_backendStarted) return
     _backendStarted = true
 
-    // Scan ports 3000-3019 for an already running backend (hot-reload recovery)
-    for (let p = 3000; p < 3020; p++) {
-      try {
-        const res = await fetch(`http://localhost:${p}/v1/health`, {
-          signal: AbortSignal.timeout(1000),
-        })
-        if (res.ok) {
-          log("INFO", `Found backend on port ${p}`)
+    // Scan ports 3001-3010 for an already running backend,
+    // or start a new one on the first available port.
+    for (let p = 3001; p <= 3010; p++) {
+      if (await isBackendHealthy(p)) {
+        log("INFO", `Found healthy backend on port ${p}`)
+        PROXY_URL = `http://localhost:${p}`
+        const models = await fetchModelsFromBackend()
+        if (models) await syncToLiveConfig(models)
+        return
+      }
+
+      if (await isPortAvailable(p)) {
+        log("INFO", `Port ${p} is available, trying to start backend`)
+        await startBackend(p)
+        const ready = await waitForBackend(p)
+        if (ready) {
           PROXY_URL = `http://localhost:${p}`
           const models = await fetchModelsFromBackend()
           if (models) await syncToLiveConfig(models)
           return
         }
-      } catch {
-        /* try next */
       }
     }
-
-    // Fallback: double-check port 3001 to avoid spawning a duplicate
-    if (await isPortInUse(3001)) {
-      log("INFO", "Backend already running on :3001")
-      const models = await fetchModelsFromBackend()
-      if (models) await syncToLiveConfig(models)
-      return
-    }
-
-    await startBackend(3001)
-    const ready = await waitForBackend(3001)
-    log("INFO", `Backend configured at ${PROXY_URL}`)
-    if (ready) {
-      const models = await fetchModelsFromBackend()
-      if (models) {
-        await syncToLiveConfig(models)
-      }
-    }
+    log("ERROR", "Could not start or find backend in range 3001-3010")
   }
 
   initialize().catch((err) => log("ERROR", "Backend startup error:", err))
