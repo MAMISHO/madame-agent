@@ -64,4 +64,8 @@ export class HarnessService {
   deleteScalableModel(id: string): Observable<void> {
     return this.http.delete<void>(`/v1/duos/${id}`);
   }
+
+  syncToOpenCode(): Observable<{ ok: boolean; count?: number; message?: string }> {
+    return this.http.post<{ ok: boolean; count?: number; message?: string }>('/v1/harness/sync-to-opencode', {});
+  }
 }

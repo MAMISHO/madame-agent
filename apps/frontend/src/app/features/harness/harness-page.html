@@ -1,40 +1,59 @@
-<!-- Sub-Panel: Harness Registry Deck -->
-<app-harness-list
-  [harnesses]="(harnesses$ | async)!"
-  [selectedHarness]="(selectedHarness$ | async)"
-  [isLoading]="(loading$ | async)!"
-  (selectHarness)="onSelectHarness($event)"
-  (createHarness)="onCreateHarness($event)"
-  (deleteHarness)="onDeleteHarness($event)"
-  (activateHarness)="onActivateHarness($event)"
-/>
+<div class="page-header">
+  <h2>Harness Manager</h2>
+  <button
+    class="sync-btn"
+    [class.syncing]="isSyncing()"
+    [disabled]="!syncDirty() || isSyncing()"
+    (click)="onSyncToOpenCode()"
+  >
+    @if (isSyncing()) {
+      <span class="spinner"></span>
+      Syncing...
+    } @else {
+      Sync to OpenCode
+    }
+  </button>
+</div>
 
-<!-- Sub-Panel: Flowchart Workspace -->
-<app-graph-flow
-  [harness]="(selectedHarness$ | async)"
-  [agentStates]="agentStates()"
-  [selectedAgent]="(selectedAgent$ | async)"
-  [consoleLogs]="consoleLogs()"
-  [showConsole]="showLogsConsole()"
-  [isLoading]="(detailLoading$ | async)!"
-  (selectAgent)="onSelectAgent($event)"
-  (toggleConsole)="onToggleConsole()"
-  (clearLogs)="onClearLogs()"
-/>
-
-<!-- Sub-Panel: Agent Editor (Slides in when agent selected) -->
-@if (selectedAgentRole(); as role) {
-  <app-agent-editor
-    [agent]="(selectedAgent$ | async)!"
-    [role]="role"
-    [harness]="(selectedHarness$ | async)"
-    [providers]="(providers$ | async)!"
-    [scalableModels]="(scalableModels$ | async)!"
-    [allHarnesses]="(harnesses$ | async)!"
-    [isLoading]="(agentLoading$ | async)!"
-    (close)="onCloseEditor()"
-    (save)="onSaveAgent($event)"
-    (addProvider)="onAddProvider($event)"
-    (addScalableModel)="onCreateScalableModel($event)"
+<div class="panels-row">
+  <!-- Sub-Panel: Harness Registry Deck -->
+  <app-harness-list
+    [harnesses]="(harnesses$ | async)!"
+    [selectedHarness]="(selectedHarness$ | async)"
+    [isLoading]="(loading$ | async)!"
+    (selectHarness)="onSelectHarness($event)"
+    (createHarness)="onCreateHarness($event)"
+    (deleteHarness)="onDeleteHarness($event)"
+    (activateHarness)="onActivateHarness($event)"
   />
-}
+
+  <!-- Sub-Panel: Flowchart Workspace -->
+  <app-graph-flow
+    [harness]="(selectedHarness$ | async)"
+    [agentStates]="agentStates()"
+    [selectedAgent]="(selectedAgent$ | async)"
+    [consoleLogs]="consoleLogs()"
+    [showConsole]="showLogsConsole()"
+    [isLoading]="(detailLoading$ | async)!"
+    (selectAgent)="onSelectAgent($event)"
+    (toggleConsole)="onToggleConsole()"
+    (clearLogs)="onClearLogs()"
+  />
+
+  <!-- Sub-Panel: Agent Editor (Slides in when agent selected) -->
+  @if (selectedAgentRole(); as role) {
+    <app-agent-editor
+      [agent]="(selectedAgent$ | async)!"
+      [role]="role"
+      [harness]="(selectedHarness$ | async)"
+      [providers]="(providers$ | async)!"
+      [scalableModels]="(scalableModels$ | async)!"
+      [allHarnesses]="(harnesses$ | async)!"
+      [isLoading]="(agentLoading$ | async)!"
+      (close)="onCloseEditor()"
+      (save)="onSaveAgent($event)"
+      (addProvider)="onAddProvider($event)"
+      (addScalableModel)="onCreateScalableModel($event)"
+    />
+  }
+</div>

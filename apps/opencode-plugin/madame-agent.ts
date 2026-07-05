@@ -2,12 +2,15 @@ import type { Plugin, ProviderHookContext } from "@opencode-ai/plugin"
 import type { Model as ModelV2 } from "@opencode-ai/sdk/v2"
 import { spawn } from "child_process"
 import * as fs from "fs"
+import * as http from "http"
 import * as path from "path"
 import * as os from "os"
 
 const MADAME_BASE_URL = "http://localhost:3001"
 let PROXY_URL = MADAME_BASE_URL
 let _backendStarted = false
+
+const PLUGIN_PORT_PATH = path.join(os.homedir(), ".local/share/madame-agent/plugin-port")
 
 const STATIC_MODELS: Record<string, ModelV2> = {
   "madame-auto": {
@@ -110,8 +113,9 @@ async function fetchModelsFromBackend(): Promise<Record<string, ModelV2> | null>
   }
 }
 
-export const MadameAgent: Plugin = async () => {
+export const MadameAgent: Plugin = async (input: any) => {
   const log = (...args: unknown[]) => console.log("[madame-agent]", ...args)
+  const client = input?.client
 
   console.log("")
   console.log("[madame-agent] ╔═══════════════════════════════════════╗")
@@ -120,6 +124,64 @@ export const MadameAgent: Plugin = async () => {
   console.log("")
 
   let backendProcess: ReturnType<typeof spawn> | null = null
+
+  async function syncToLiveConfig(models: Record<string, ModelV2>) {
+    if (!client) {
+      log("client not available, skipping live config sync")
+      return
+    }
+    try {
+      const configData = await client.config.get()
+      const cfg = configData?.data || {}
+      if (!cfg.provider) cfg.provider = {}
+      if (!cfg.provider["madame-agent"]) {
+        cfg.provider["madame-agent"] = {
+          name: "Madame Agent (hybrid proxy)",
+          npm: "@ai-sdk/openai-compatible",
+          options: { baseURL: `${PROXY_URL}/v1` },
+          models: {},
+        }
+      }
+      cfg.provider["madame-agent"].models = modelsToConfigFormat(models)
+      await client.config.update({ body: cfg })
+      log(`Synced ${Object.keys(models).length} models to live config`)
+    } catch (e: any) {
+      log("Error syncing to live config:", e.message)
+    }
+  }
+
+  // ── HTTP server for backend-triggered sync ──
+  const httpServer = http.createServer(async (req, res) => {
+    if (req.method === "POST" && req.url === "/sync-models") {
+      try {
+        const models = await fetchModelsFromBackend()
+        if (models) {
+          syncModelsToConfig(models)
+          await syncToLiveConfig(models)
+        }
+        const count = models ? Object.keys(models).length : 0
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ ok: true, count }))
+      } catch (e: any) {
+        res.writeHead(500, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ ok: false, error: e.message }))
+      }
+      return
+    }
+    res.writeHead(404)
+    res.end()
+  })
+
+  httpServer.listen(0, "127.0.0.1", () => {
+    const port = (httpServer.address() as any).port
+    try {
+      fs.mkdirSync(path.dirname(PLUGIN_PORT_PATH), { recursive: true })
+      fs.writeFileSync(PLUGIN_PORT_PATH, String(port))
+      log(`Sync HTTP server listening on port ${port}`)
+    } catch (e) {
+      log(`WARNING: Could not write plugin port file:`, e)
+    }
+  })
 
   const findMainJs = (): string | null => {
     const candidates = [
@@ -199,7 +261,10 @@ export const MadameAgent: Plugin = async () => {
         log(`Backend detected on port ${p}`)
         PROXY_URL = `http://localhost:${p}`
         const models = await fetchModelsFromBackend()
-        if (models) syncModelsToConfig(models)
+        if (models) {
+          syncModelsToConfig(models)
+          await syncToLiveConfig(models)
+        }
         return
       }
     }
@@ -207,7 +272,10 @@ export const MadameAgent: Plugin = async () => {
     if (await isPortInUse(3001)) {
       log(`Backend already running on :3001`)
       const models = await fetchModelsFromBackend()
-      if (models) syncModelsToConfig(models)
+      if (models) {
+        syncModelsToConfig(models)
+        await syncToLiveConfig(models)
+      }
       return
     }
 
@@ -216,7 +284,10 @@ export const MadameAgent: Plugin = async () => {
     log(`Backend configured at ${PROXY_URL}`)
     if (ready) {
       const models = await fetchModelsFromBackend()
-      if (models) syncModelsToConfig(models)
+      if (models) {
+        syncModelsToConfig(models)
+        await syncToLiveConfig(models)
+      }
     }
   }
 
@@ -258,6 +329,22 @@ export const MadameAgent: Plugin = async () => {
       }
     },
 
+    "tool": {
+      "refresh-models": {
+        description: "Re-sync models from the madame-agent backend to the live OpenCode config. Call this after creating, activating, or deleting harnesses so new models appear without restarting OpenCode.",
+        args: {},
+        execute: async () => {
+          const models = await fetchModelsFromBackend()
+          if (models) {
+            syncModelsToConfig(models)
+            await syncToLiveConfig(models)
+            return `Synced ${Object.keys(models).length} models to OpenCode.`
+          }
+          return "No models found from backend."
+        },
+      },
+    },
+
     "command.execute.before": async (input: any, output: any) => {
       if (input.command !== "madame-stats") return
 
@@ -296,6 +383,8 @@ export const MadameAgent: Plugin = async () => {
     },
 
     dispose: async () => {
+      httpServer.close()
+      try { fs.unlinkSync(PLUGIN_PORT_PATH) } catch { /* ignore */ }
       if (backendProcess && !backendProcess.killed) {
         log("Stopping backend process")
         backendProcess.kill("SIGTERM")

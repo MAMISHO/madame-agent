@@ -220,6 +220,27 @@ export class HarnessService {
     return agentMapper.toDTO(agent);
   }
 
+  async syncToOpenCodeLive(): Promise<{ ok: boolean; count?: number; message?: string }> {
+    const portPath = path.join(os.homedir(), '.local/share/madame-agent/plugin-port');
+    if (!fs.existsSync(portPath)) {
+      return { ok: false, message: 'Plugin HTTP server not available. Restart OpenCode.' };
+    }
+    try {
+      const port = fs.readFileSync(portPath, 'utf-8').trim();
+      const res = await fetch(`http://127.0.0.1:${port}/sync-models`, { method: 'POST' });
+      const data = await res.json() as { ok: boolean; count?: number; error?: string };
+      if (data.ok) {
+        this.logger.log(`Triggered live sync: ${data.count} models`);
+        return { ok: true, count: data.count };
+      }
+      this.logger.error(`Live sync failed: ${data.error}`);
+      return { ok: false, message: data.error };
+    } catch (err: any) {
+      this.logger.error(`Failed to sync to OpenCode live: ${err.message}`);
+      return { ok: false, message: `Connection failed: ${err.message}` };
+    }
+  }
+
   private async syncToOpenCode() {
     try {
       const configPath = path.join(os.homedir(), '.config/opencode/opencode.json');

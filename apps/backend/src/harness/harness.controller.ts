@@ -50,5 +50,10 @@ export class HarnessController {
   ) {
     return this.harnessService.getAgent(id, role);
   }
+
+  @Post('sync-to-opencode')
+  async syncToOpenCodeLive() {
+    return this.harnessService.syncToOpenCodeLive();
+  }
 }
 

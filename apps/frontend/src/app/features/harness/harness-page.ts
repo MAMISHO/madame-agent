@@ -7,6 +7,7 @@ import { selectAllHarnesses, selectSelectedHarness, selectAllProviders, selectAl
 import { Harness, AgentConfig } from './domain/harness.model';
 import { ProviderConfig } from './domain/provider.model';
 import { ScalableModelConfig } from './domain/scalable-model.model';
+import { HarnessService } from './data/harness.service';
 import { HarnessListComponent } from './ui/harness-list/harness-list.component';
 import { GraphFlowComponent } from './ui/graph-flow/graph-flow.component';
 import { AgentEditorComponent } from './ui/agent-editor/agent-editor.component';
@@ -20,6 +21,7 @@ import { AgentEditorComponent } from './ui/agent-editor/agent-editor.component';
 })
 export class HarnessPageComponent implements OnInit, OnDestroy {
   private store = inject(Store);
+  private harnessService = inject(HarnessService);
   private sub!: Subscription;
 
   harnesses$ = this.store.select(selectAllHarnesses);
@@ -34,6 +36,9 @@ export class HarnessPageComponent implements OnInit, OnDestroy {
   selectedHarness = signal<Harness | null>(null);
 
   selectedAgent$ = this.store.select(selectSelectedAgentDetail);
+
+  syncDirty = signal(false);
+  isSyncing = signal(false);
 
   consoleLogs = signal<string[]>([]);
   agentStates = signal<Record<string, string>>({
@@ -92,15 +97,18 @@ export class HarnessPageComponent implements OnInit, OnDestroy {
   onCreateHarness(payload: {code: string, name: string, cloneFromHarnessId?: string}) {
     const tempId = 'temp_' + Date.now();
     this.store.dispatch(HarnessActions.createHarnessOptimistic({ code: payload.code, name: payload.name, cloneFromHarnessId: payload.cloneFromHarnessId, tempId }));
+    this.markSyncDirty();
   }
 
   onDeleteHarness(harness: Harness) {
     if (!confirm(`Are you sure you want to delete harness "${harness.name}"?`)) return;
     this.store.dispatch(HarnessActions.deleteHarnessOptimistic({ harness }));
+    this.markSyncDirty();
   }
 
   onActivateHarness(harness: Harness) {
     this.store.dispatch(HarnessActions.makeHarnessActive({ harness }));
+    this.markSyncDirty();
   }
 
   onSelectAgent(agent: AgentConfig) {
@@ -129,6 +137,25 @@ export class HarnessPageComponent implements OnInit, OnDestroy {
 
   onCreateScalableModel(model: ScalableModelConfig) {
     this.store.dispatch(HarnessActions.createScalableModel({ model }));
+  }
+
+  onSyncToOpenCode() {
+    this.isSyncing.set(true);
+    this.harnessService.syncToOpenCode().subscribe({
+      next: (result) => {
+        this.isSyncing.set(false);
+        if (result.ok) {
+          this.syncDirty.set(false);
+        }
+      },
+      error: () => {
+        this.isSyncing.set(false);
+      },
+    });
+  }
+
+  markSyncDirty() {
+    this.syncDirty.set(true);
   }
 
   onClearLogs() {
