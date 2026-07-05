@@ -329,22 +329,6 @@ export const MadameAgent: Plugin = async (input: any) => {
       }
     },
 
-    "tool": {
-      "refresh-models": {
-        description: "Re-sync models from the madame-agent backend to the live OpenCode config. Call this after creating, activating, or deleting harnesses so new models appear without restarting OpenCode.",
-        args: {},
-        execute: async () => {
-          const models = await fetchModelsFromBackend()
-          if (models) {
-            syncModelsToConfig(models)
-            await syncToLiveConfig(models)
-            return `Synced ${Object.keys(models).length} models to OpenCode.`
-          }
-          return "No models found from backend."
-        },
-      },
-    },
-
     "command.execute.before": async (input: any, output: any) => {
       if (input.command !== "madame-stats") return
 
@@ -385,10 +369,10 @@ export const MadameAgent: Plugin = async (input: any) => {
     dispose: async () => {
       httpServer.close()
       try { fs.unlinkSync(PLUGIN_PORT_PATH) } catch { /* ignore */ }
-      if (backendProcess && !backendProcess.killed) {
-        log("Stopping backend process")
-        backendProcess.kill("SIGTERM")
-      }
+      // DON'T kill backendProcess — let it keep running.
+      // Multiple plugin instances may exist (OpenCode hot-reload) and
+      // killing it would break all of them. The user can kill it via
+      // the uninstall script or manually.
     },
   }
 }
