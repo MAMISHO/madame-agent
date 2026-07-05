@@ -1,5 +1,5 @@
 import type { Plugin, ProviderHookContext } from "@opencode-ai/plugin"
-import type { Provider as ProviderV2, Model as ModelV2 } from "@opencode-ai/sdk/v2"
+import type { Model as ModelV2 } from "@opencode-ai/sdk/v2"
 import { spawn } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
@@ -31,8 +31,93 @@ const DELEGATION_INSTRUCTIONS = `
 You have access to madame-agent's orchestrator models for complex tasks.
 `
 
+function getOpenCodeConfigPath(): string {
+  return path.join(os.homedir(), ".config/opencode/opencode.json")
+}
+
+function modelsToConfigFormat(models: Record<string, ModelV2>): Record<string, { name: string }> {
+  const out: Record<string, { name: string }> = {}
+  for (const [id, m] of Object.entries(models)) {
+    out[id] = { name: m.name }
+  }
+  return out
+}
+
+function writeConfigSync(cfg: any) {
+  const configPath = getOpenCodeConfigPath()
+  const tmpPath = configPath + ".madame-tmp"
+  fs.writeFileSync(tmpPath, JSON.stringify(cfg, null, 2) + "\n")
+  fs.renameSync(tmpPath, configPath)
+}
+
+function syncModelsToConfig(models: Record<string, ModelV2>) {
+  const configPath = getOpenCodeConfigPath()
+  if (!fs.existsSync(configPath)) return
+
+  try {
+    const raw = fs.readFileSync(configPath, "utf-8")
+    const cfg = JSON.parse(raw)
+
+    if (!cfg.provider) cfg.provider = {}
+    if (!cfg.provider["madame-agent"]) {
+      cfg.provider["madame-agent"] = {
+        name: "Madame Agent (hybrid proxy)",
+        npm: "@ai-sdk/openai-compatible",
+        options: { baseURL: "http://localhost:3001/v1" },
+        models: {},
+      }
+    }
+
+    cfg.provider["madame-agent"].models = modelsToConfigFormat(models)
+    writeConfigSync(cfg)
+    console.log(`[madame-agent] Synced ${Object.keys(models).length} models to config`)
+  } catch (e) {
+    console.log("[madame-agent] Error syncing models to config:", e)
+  }
+}
+
+async function fetchModelsFromBackend(): Promise<Record<string, ModelV2> | null> {
+  try {
+    const res = await fetch(`${PROXY_URL}/v1/models`)
+    if (!res.ok) return null
+    const data = await res.json()
+    const dynamicModels: Record<string, ModelV2> = { ...STATIC_MODELS }
+
+    for (const m of data.data || []) {
+      if (m.owned_by === "ollama" || m.owned_by === "google" || m.owned_by === "nvidia") {
+        continue
+      }
+
+      let displayName = m.id
+      if (m.id.startsWith("madame-orchestrator-")) {
+        displayName = `Madame-Orchestrator (${m.id.replace("madame-orchestrator-", "")})`
+      } else if (m.id.startsWith("madame-")) {
+        displayName = m.id.replace("madame-", "Madame ").replace(/-/g, " ")
+      }
+
+      dynamicModels[m.id] = {
+        id: m.id,
+        name: displayName,
+        provider: "madame-agent",
+        capabilities: ["chat"],
+        metadata: { tools: true },
+      }
+    }
+
+    return dynamicModels
+  } catch {
+    return null
+  }
+}
+
 export const MadameAgent: Plugin = async () => {
   const log = (...args: unknown[]) => console.log("[madame-agent]", ...args)
+
+  console.log("")
+  console.log("[madame-agent] ╔═══════════════════════════════════════╗")
+  console.log("[madame-agent] ║      Madame Agent PLUGIN LOADED       ║")
+  console.log("[madame-agent] ╚═══════════════════════════════════════╝")
+  console.log("")
 
   let backendProcess: ReturnType<typeof spawn> | null = null
 
@@ -113,62 +198,39 @@ export const MadameAgent: Plugin = async () => {
       if (await isPortInUse(p)) {
         log(`Backend detected on port ${p}`)
         PROXY_URL = `http://localhost:${p}`
+        const models = await fetchModelsFromBackend()
+        if (models) syncModelsToConfig(models)
         return
       }
     }
 
     if (await isPortInUse(3001)) {
       log(`Backend already running on :3001`)
+      const models = await fetchModelsFromBackend()
+      if (models) syncModelsToConfig(models)
       return
     }
 
     await startBackend(3001)
-    await waitForBackend(3001)
+    const ready = await waitForBackend(3001)
     log(`Backend configured at ${PROXY_URL}`)
+    if (ready) {
+      const models = await fetchModelsFromBackend()
+      if (models) syncModelsToConfig(models)
+    }
   }
 
-  await initialize()
+  initialize().catch(err => log("Backend startup error:", err))
 
   return {
     provider: {
       id: "madame-agent",
-      models: async (provider: ProviderV2, _ctx: ProviderHookContext): Promise<Record<string, ModelV2>> => {
-        try {
-          const res = await fetch(`${PROXY_URL}/v1/models`)
-          if (res.ok) {
-            const data = await res.json()
-            const dynamicModels: Record<string, ModelV2> = { ...STATIC_MODELS }
-            
-            for (const m of data.data || []) {
-              // Skip ollama and cloud provider models (handled by their own providers)
-              if (m.owned_by === "ollama" || m.owned_by === "google" || m.owned_by === "nvidia") {
-                continue
-              }
-              
-              // Format display name
-              let displayName = m.id
-              if (m.id.startsWith("madame-orchestrator-")) {
-                displayName = `Madame-Orchestrator (${m.id.replace("madame-orchestrator-", "")})`
-              } else if (m.id.startsWith("madame-")) {
-                displayName = m.id.replace("madame-", "Madame ").replace(/-/g, " ")
-              }
-              
-              dynamicModels[m.id] = {
-                id: m.id,
-                name: displayName,
-                provider: "madame-agent",
-                capabilities: ["chat"],
-                metadata: { tools: true },
-              }
-            }
-            return dynamicModels
-          }
-        } catch (e) {
-          log("Error fetching models:", e)
-        }
-        return STATIC_MODELS
+      models: async (): Promise<Record<string, ModelV2>> => {
+        log("models() hook called — fetching from backend")
+        const models = await fetchModelsFromBackend()
+        return models ?? STATIC_MODELS
       },
-    } as any,
+    },
 
     "chat.params": async (input: any, output: any) => {
       const agentMode = input.agent?.mode || "build"
@@ -241,5 +303,3 @@ export const MadameAgent: Plugin = async () => {
     },
   }
 }
-
-

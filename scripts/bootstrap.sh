@@ -69,6 +69,57 @@ run_install_steps() {
     export MADAME_PORT="$PORT_ARG"
   fi
 
+  # Configure provider in opencode.json
+  echo ""
+  echo "=== Configurando provider en opencode.json ==="
+  OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+  if [ -f "$OPENCODE_CONFIG" ]; then
+    node -e "
+      const fs = require('fs');
+      const cfg = JSON.parse(fs.readFileSync('$OPENCODE_CONFIG', 'utf8'));
+      if (!cfg.provider) cfg.provider = {};
+      if (!cfg.provider['madame-agent']) {
+        cfg.provider['madame-agent'] = {
+          name: 'Madame Agent (hybrid proxy)',
+          npm: '@ai-sdk/openai-compatible',
+          options: { baseURL: 'http://localhost:3001/v1' },
+          models: {
+            'madame-auto': { name: 'Madame Auto (Dynamic Routing)' },
+            'madame-local-only': { name: 'Madame Local Only (Ollama)' }
+          }
+        };
+        fs.writeFileSync('$OPENCODE_CONFIG', JSON.stringify(cfg, null, 2) + '\\n');
+        console.log('  ✓ Provider madame-agent agregado a opencode.json');
+      } else {
+        const p = cfg.provider['madame-agent'];
+        if (!p.npm) {
+          p.npm = '@ai-sdk/openai-compatible';
+          fs.writeFileSync('$OPENCODE_CONFIG', JSON.stringify(cfg, null, 2) + '\\n');
+          console.log('  ✓ Agregado npm key al provider madame-agent');
+        }
+        if (!p.models) {
+          p.models = {
+            'madame-auto': { name: 'Madame Auto (Dynamic Routing)' },
+            'madame-local-only': { name: 'Madame Local Only (Ollama)' }
+          };
+          fs.writeFileSync('$OPENCODE_CONFIG', JSON.stringify(cfg, null, 2) + '\\n');
+          console.log('  ✓ Agregados modelos estáticos al provider madame-agent');
+        }
+        if (p.npm && p.models) {
+          console.log('  ✓ Provider madame-agent ya configurado correctamente');
+        }
+      }
+    "
+  else
+    echo "  ⚠ opencode.json no encontrado en $OPENCODE_CONFIG"
+    echo "  Para configurar manualmente, agrega esto a tu opencode.json:"
+    echo '    "madame-agent": {'
+    echo '      "name": "Madame Agent (hybrid proxy)",'
+    echo '      "npm": "@ai-sdk/openai-compatible",'
+    echo '      "options": { "baseURL": "http://localhost:3001/v1" }'
+    echo '    }'
+  fi
+
   echo ""
   echo "=== Instalación de Madame Agent completada con éxito ==="
   echo "Nota: Si tienes OpenCode ejecutándose, por favor reinícialo."
