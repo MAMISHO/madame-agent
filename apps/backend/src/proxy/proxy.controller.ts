@@ -42,71 +42,32 @@ export class ProxyController {
       new Map(modelsList.map((item) => [item.id, item])).values(),
     );
 
-    // Composite model pairs (exposing both id and name for flexibility)
-    const pairModels = modelPairs.flatMap((pair: any) => [
-      {
-        id: pair.id,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'madame-agent',
-      },
-      {
-        id: pair.name,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'madame-agent',
-      }
-    ]);
-
-    // Active Harnesses from DB
-    const activeHarnesses = await HarnessEntity.findAll({ where: { isActive: true } });
-
-    const orchestratorModels = activeHarnesses.flatMap((harness) => [
-      {
-        id: harness.code,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'madame-agent',
-      },
-      {
-        id: harness.name,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'madame-agent',
-      }
-    ]);
-
-    const allModels = [...pairModels, ...orchestratorModels, ...uniqueModels];
-    const uniqueAllModels = Array.from(
-      new Map(allModels.map((item) => [item.id, item])).values(),
-    );
-
-    // Virtual models for execution modes
-    const virtualModels = [
-      {
-        id: 'madame-auto',
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'madame-agent',
-      },
-      {
-        id: 'madame-local-only',
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'madame-agent',
-      },
-    ];
-
-    const orchestratorVirtuals = activeHarnesses.map((harness) => ({
-      id: `madame-orchestrator-${harness.code}`,
+    // Composite model pairs (duos)
+    const pairModels = modelPairs.map((pair: any) => ({
+      id: pair.id,
       object: 'model',
       created: Math.floor(Date.now() / 1000),
       owned_by: 'madame-agent',
     }));
 
+    // Active Harnesses from DB
+    const activeHarnesses = await HarnessEntity.findAll({ where: { isActive: true } });
+
+    const harnessModels = activeHarnesses.map((harness) => ({
+      id: harness.code,
+      object: 'model',
+      created: Math.floor(Date.now() / 1000),
+      owned_by: 'madame-agent',
+    }));
+
+    const allModels = [...pairModels, ...harnessModels, ...uniqueModels];
+    const uniqueAllModels = Array.from(
+      new Map(allModels.map((item) => [item.id, item])).values(),
+    );
+
     return {
       object: 'list',
-      data: [...uniqueAllModels, ...virtualModels, ...orchestratorVirtuals],
+      data: uniqueAllModels,
     };
   }
 

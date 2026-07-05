@@ -12,21 +12,18 @@ let _backendStarted = false
 
 const PLUGIN_PORT_PATH = path.join(os.homedir(), ".local/share/madame-agent/plugin-port")
 
-const STATIC_MODELS: Record<string, ModelV2> = {
-  "madame-auto": {
-    id: "madame-auto",
-    name: "Madame Auto (Dynamic Routing)",
-    provider: "madame-agent",
-    capabilities: ["chat"],
-    metadata: { tools: true },
-  },
-  "madame-local-only": {
-    id: "madame-local-only",
-    name: "Madame Local Only (Ollama)",
-    provider: "madame-agent",
-    capabilities: ["chat"],
-    metadata: { tools: true },
-  },
+const LOG_LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 } as const
+type LogLevel = keyof typeof LOG_LEVELS
+
+function createLogger(level?: string) {
+  const configuredLevel = process.env.MADAME_LOG_LEVEL || level || "ERROR"
+  const currentLevel = (LOG_LEVELS as Record<string, number>)[configuredLevel]
+  const effectiveLevel = currentLevel !== undefined ? currentLevel : LOG_LEVELS.ERROR
+  return (lvl: LogLevel, ...args: unknown[]) => {
+    if (LOG_LEVELS[lvl] <= effectiveLevel) {
+      console.log(`[madame-agent] [${lvl}]`, ...args)
+    }
+  }
 }
 
 const DELEGATION_INSTRUCTIONS = `
@@ -53,7 +50,7 @@ function writeConfigSync(cfg: any) {
   fs.renameSync(tmpPath, configPath)
 }
 
-function syncModelsToConfig(models: Record<string, ModelV2>) {
+function syncModelsToConfig(models: Record<string, ModelV2>, log: ReturnType<typeof createLogger>) {
   const configPath = getOpenCodeConfigPath()
   if (!fs.existsSync(configPath)) return
 
@@ -73,9 +70,9 @@ function syncModelsToConfig(models: Record<string, ModelV2>) {
 
     cfg.provider["madame-agent"].models = modelsToConfigFormat(models)
     writeConfigSync(cfg)
-    console.log(`[madame-agent] Synced ${Object.keys(models).length} models to config`)
+    log("INFO", `Synced ${Object.keys(models).length} models to config`)
   } catch (e) {
-    console.log("[madame-agent] Error syncing models to config:", e)
+    log("ERROR", "Error syncing models to config:", e)
   }
 }
 
@@ -84,7 +81,7 @@ async function fetchModelsFromBackend(): Promise<Record<string, ModelV2> | null>
     const res = await fetch(`${PROXY_URL}/v1/models`)
     if (!res.ok) return null
     const data = await res.json()
-    const dynamicModels: Record<string, ModelV2> = { ...STATIC_MODELS }
+    const dynamicModels: Record<string, ModelV2> = {}
 
     for (const m of data.data || []) {
       if (m.owned_by === "ollama" || m.owned_by === "google" || m.owned_by === "nvidia") {
@@ -113,21 +110,33 @@ async function fetchModelsFromBackend(): Promise<Record<string, ModelV2> | null>
   }
 }
 
+async function findExistingServer(portFilePath: string): Promise<number | null> {
+  try {
+    if (!fs.existsSync(portFilePath)) return null
+    const port = parseInt(fs.readFileSync(portFilePath, "utf-8").trim(), 10)
+    if (isNaN(port)) return null
+    const res = await fetch(`http://127.0.0.1:${port}/health?source=plugin`, {
+      signal: AbortSignal.timeout(1000),
+    })
+    if (res.ok) return port
+    return null
+  } catch {
+    return null
+  }
+}
+
 export const MadameAgent: Plugin = async (input: any) => {
-  const log = (...args: unknown[]) => console.log("[madame-agent]", ...args)
+  const log = createLogger()
   const client = input?.client
 
-  console.log("")
-  console.log("[madame-agent] ╔═══════════════════════════════════════╗")
-  console.log("[madame-agent] ║      Madame Agent PLUGIN LOADED       ║")
-  console.log("[madame-agent] ╚═══════════════════════════════════════╝")
-  console.log("")
+  log("INFO", "Plugin loaded")
 
   let backendProcess: ReturnType<typeof spawn> | null = null
+  let myPort: number | null = null
 
   async function syncToLiveConfig(models: Record<string, ModelV2>) {
     if (!client) {
-      log("client not available, skipping live config sync")
+      log("WARN", "client not available, skipping live config sync")
       return
     }
     try {
@@ -144,44 +153,63 @@ export const MadameAgent: Plugin = async (input: any) => {
       }
       cfg.provider["madame-agent"].models = modelsToConfigFormat(models)
       await client.config.update({ body: cfg })
-      log(`Synced ${Object.keys(models).length} models to live config`)
+      log("INFO", `Synced ${Object.keys(models).length} models to live config`)
     } catch (e: any) {
-      log("Error syncing to live config:", e.message)
+      log("ERROR", "Error syncing to live config:", e.message)
     }
   }
 
-  // ── HTTP server for backend-triggered sync ──
-  const httpServer = http.createServer(async (req, res) => {
-    if (req.method === "POST" && req.url === "/sync-models") {
-      try {
-        const models = await fetchModelsFromBackend()
-        if (models) {
-          syncModelsToConfig(models)
-          await syncToLiveConfig(models)
-        }
-        const count = models ? Object.keys(models).length : 0
-        res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ ok: true, count }))
-      } catch (e: any) {
-        res.writeHead(500, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ ok: false, error: e.message }))
-      }
-      return
-    }
-    res.writeHead(404)
-    res.end()
-  })
+  // ── HTTP server for backend-triggered sync (singleton) ──
+  const existingPort = await findExistingServer(PLUGIN_PORT_PATH)
+  let httpServer: http.Server | null = null
 
-  httpServer.listen(0, "127.0.0.1", () => {
-    const port = (httpServer.address() as any).port
-    try {
-      fs.mkdirSync(path.dirname(PLUGIN_PORT_PATH), { recursive: true })
-      fs.writeFileSync(PLUGIN_PORT_PATH, String(port))
-      log(`Sync HTTP server listening on port ${port}`)
-    } catch (e) {
-      log(`WARNING: Could not write plugin port file:`, e)
-    }
-  })
+  if (existingPort === null) {
+    httpServer = http.createServer(async (req, res) => {
+      if (req.method === "GET" && req.url?.startsWith("/health")) {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ ok: true }))
+        return
+      }
+      if (req.method === "POST" && req.url === "/sync-models") {
+        try {
+          const models = await fetchModelsFromBackend()
+          if (models) {
+            await syncToLiveConfig(models)
+            syncModelsToConfig(models, log)
+          }
+          const count = models ? Object.keys(models).length : 0
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ ok: true, count }))
+        } catch (e: any) {
+          res.writeHead(500, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ ok: false, error: e.message }))
+        }
+        return
+      }
+      res.writeHead(404)
+      res.end()
+    })
+
+    httpServer.setMaxListeners(0)
+
+    httpServer.listen(0, "127.0.0.1", () => {
+      myPort = (httpServer!.address() as any).port
+      try {
+        fs.mkdirSync(path.dirname(PLUGIN_PORT_PATH), { recursive: true })
+        fs.writeFileSync(PLUGIN_PORT_PATH, String(myPort))
+        log("INFO", `Sync HTTP server listening on port ${myPort}`)
+      } catch (e) {
+        log("WARN", `Could not write plugin port file:`, e)
+      }
+    })
+
+    httpServer.on("close", () => {
+      log("DEBUG", "HTTP server closed")
+    })
+  } else {
+    myPort = existingPort
+    log("INFO", `Reusing existing HTTP server on port ${existingPort}`)
+  }
 
   const findMainJs = (): string | null => {
     const candidates = [
@@ -198,12 +226,9 @@ export const MadameAgent: Plugin = async (input: any) => {
 
   const isPortInUse = async (port: number): Promise<boolean> => {
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 500)
-      const res = await fetch(`http://localhost:${port}/v1/models`, {
-        signal: controller.signal,
+      const res = await fetch(`http://localhost:${port}/v1/health`, {
+        signal: AbortSignal.timeout(1000),
       })
-      clearTimeout(timeout)
       return res.ok
     } catch {
       return false
@@ -213,12 +238,12 @@ export const MadameAgent: Plugin = async (input: any) => {
   const startBackend = async (port: number) => {
     const mainJs = findMainJs()
     if (!mainJs) {
-      log(`WARNING: main.js not found, skipping auto-start`)
+      log("WARN", "main.js not found, skipping auto-start")
       return false
     }
 
     const cwd = path.dirname(path.dirname(mainJs))
-    log(`Starting backend on port ${port} from ${mainJs}`)
+    log("INFO", `Starting backend on port ${port} from ${mainJs}`)
 
     backendProcess = spawn("node", [mainJs], {
       cwd,
@@ -240,7 +265,7 @@ export const MadameAgent: Plugin = async (input: any) => {
           signal: AbortSignal.timeout(2000),
         })
         if (res.ok) {
-          log(`Backend ready on port ${port}`)
+          log("INFO", `Backend ready on port ${port}`)
           return true
         }
       } catch {
@@ -248,7 +273,7 @@ export const MadameAgent: Plugin = async (input: any) => {
       }
       await new Promise((r) => setTimeout(r, 1000))
     }
-    log(`WARNING: Backend did not become ready within ${timeoutMs / 1000}s`)
+    log("WARN", `Backend did not become ready within ${timeoutMs / 1000}s`)
     return false
   }
 
@@ -256,50 +281,51 @@ export const MadameAgent: Plugin = async (input: any) => {
     if (_backendStarted) return
     _backendStarted = true
 
+    // Scan ports 3000-3019 for an already running backend (hot-reload recovery)
     for (let p = 3000; p < 3020; p++) {
-      if (await isPortInUse(p)) {
-        log(`Backend detected on port ${p}`)
-        PROXY_URL = `http://localhost:${p}`
-        const models = await fetchModelsFromBackend()
-        if (models) {
-          syncModelsToConfig(models)
-          await syncToLiveConfig(models)
+      try {
+        const res = await fetch(`http://localhost:${p}/v1/health`, {
+          signal: AbortSignal.timeout(1000),
+        })
+        if (res.ok) {
+          log("INFO", `Found backend on port ${p}`)
+          PROXY_URL = `http://localhost:${p}`
+          const models = await fetchModelsFromBackend()
+          if (models) await syncToLiveConfig(models)
+          return
         }
-        return
+      } catch {
+        /* try next */
       }
     }
 
+    // Fallback: double-check port 3001 to avoid spawning a duplicate
     if (await isPortInUse(3001)) {
-      log(`Backend already running on :3001`)
+      log("INFO", "Backend already running on :3001")
       const models = await fetchModelsFromBackend()
-      if (models) {
-        syncModelsToConfig(models)
-        await syncToLiveConfig(models)
-      }
+      if (models) await syncToLiveConfig(models)
       return
     }
 
     await startBackend(3001)
     const ready = await waitForBackend(3001)
-    log(`Backend configured at ${PROXY_URL}`)
+    log("INFO", `Backend configured at ${PROXY_URL}`)
     if (ready) {
       const models = await fetchModelsFromBackend()
       if (models) {
-        syncModelsToConfig(models)
         await syncToLiveConfig(models)
       }
     }
   }
 
-  initialize().catch(err => log("Backend startup error:", err))
+  initialize().catch((err) => log("ERROR", "Backend startup error:", err))
 
   return {
     provider: {
       id: "madame-agent",
       models: async (): Promise<Record<string, ModelV2>> => {
-        log("models() hook called — fetching from backend")
-        const models = await fetchModelsFromBackend()
-        return models ?? STATIC_MODELS
+        log("DEBUG", "models() hook called — fetching from backend")
+        return (await fetchModelsFromBackend()) ?? {}
       },
     },
 
@@ -367,12 +393,26 @@ export const MadameAgent: Plugin = async (input: any) => {
     },
 
     dispose: async () => {
-      httpServer.close()
-      try { fs.unlinkSync(PLUGIN_PORT_PATH) } catch { /* ignore */ }
-      // DON'T kill backendProcess — let it keep running.
-      // Multiple plugin instances may exist (OpenCode hot-reload) and
-      // killing it would break all of them. The user can kill it via
-      // the uninstall script or manually.
+      // Kill backend process so it doesn't become a zombie
+      if (backendProcess) {
+        backendProcess.kill("SIGTERM")
+        backendProcess = null
+      }
+
+      // Only delete plugin-port file if it's ours
+      try {
+        const currentPort = fs.readFileSync(PLUGIN_PORT_PATH, "utf-8").trim()
+        if (currentPort === String(myPort)) {
+          fs.unlinkSync(PLUGIN_PORT_PATH)
+        }
+      } catch {
+        /* file doesn't exist or not ours */
+      }
+
+      // Reset flag so next instance can start backend on hot-reload
+      _backendStarted = false
+
+      // DO NOT close httpServer — it's shared, other instances use it
     },
   }
 }

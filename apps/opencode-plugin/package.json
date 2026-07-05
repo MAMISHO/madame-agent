@@ -9,6 +9,7 @@
     "package": "npm run build && node package-plugin.js"
   },
   "devDependencies": {
+    "@types/node": "^24.13.2",
     "solid-js": "^1.9.13",
     "typescript": "^5.7.3"
   }
