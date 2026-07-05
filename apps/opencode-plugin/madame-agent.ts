@@ -16,7 +16,7 @@ const LOG_LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 } as const
 type LogLevel = keyof typeof LOG_LEVELS
 
 function createLogger(level?: string) {
-  const configuredLevel = process.env.MADAME_LOG_LEVEL || level || "ERROR"
+  const configuredLevel = process.env.MADAME_LOG_LEVEL || level || "INFO"
   const currentLevel = (LOG_LEVELS as Record<string, number>)[configuredLevel]
   const effectiveLevel = currentLevel !== undefined ? currentLevel : LOG_LEVELS.ERROR
   return (lvl: LogLevel, ...args: unknown[]) => {
@@ -248,7 +248,7 @@ export const MadameAgent: Plugin = async (input: any) => {
     backendProcess = spawn("node", [mainJs], {
       cwd,
       stdio: "pipe",
-      env: { ...process.env, PORT: String(port) },
+      env: { ...process.env, PORT: String(port), MADAME_LOG_LEVEL: process.env.MADAME_LOG_LEVEL || "INFO" },
     })
 
     backendProcess.stdout?.on("data", (d) => process.stdout.write(d))
