@@ -9,9 +9,22 @@ import * as os from "os"
 
 const MADAME_BASE_URL = "http://localhost:3001"
 let PROXY_URL = MADAME_BASE_URL
-let _backendStarted = false
 
 const PLUGIN_PORT_PATH = path.join(os.homedir(), ".local/share/madame-agent/plugin-port")
+const LOCK_FILE = path.join(os.homedir(), ".local/share/madame-agent/locks/backend.pid")
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    return process.kill(pid, 0)
+  } catch {
+    return false
+  }
+}
+
+function ensureLockDir() {
+  const dir = path.dirname(LOCK_FILE)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+}
 
 const LOG_LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 } as const
 type LogLevel = keyof typeof LOG_LEVELS
@@ -266,6 +279,10 @@ export const MadameAgent: Plugin = async (input: any) => {
 
     backendProcess.stdout?.on("data", (d) => process.stdout.write(d))
     backendProcess.stderr?.on("data", (d) => process.stderr.write(d))
+    
+    // Write lock file
+    ensureLockDir()
+    fs.writeFileSync(LOCK_FILE, String(backendProcess.pid))
 
     return true
   }
@@ -291,11 +308,19 @@ export const MadameAgent: Plugin = async (input: any) => {
   }
 
   const initialize = async () => {
-    if (_backendStarted) return
-    _backendStarted = true
+    // 1. Process Discovery Lock
+    if (fs.existsSync(LOCK_FILE)) {
+      const pid = parseInt(fs.readFileSync(LOCK_FILE, 'utf-8'), 10);
+      if (isProcessRunning(pid)) {
+         log("INFO", "Backend already managed by process " + pid);
+         return; 
+      } else {
+         log("WARN", "Stale lock file found for process " + pid + ", cleaning up");
+         fs.unlinkSync(LOCK_FILE);
+      }
+    }
 
-    // Scan ports 3001-3010 for an already running backend,
-    // or start a new one on the first available port.
+    // 2. Adaptive Port Binding
     for (let p = 3001; p <= 3010; p++) {
       if (await isBackendHealthy(p)) {
         log("INFO", `Found healthy backend on port ${p}`)
@@ -410,9 +435,15 @@ export const MadameAgent: Plugin = async (input: any) => {
       } catch {
         /* file doesn't exist or not ours */
       }
-
-      // Reset flag so next instance can start backend on hot-reload
-      _backendStarted = false
+      
+      // Cleanup lock file
+      try {
+        if (fs.existsSync(LOCK_FILE)) {
+          fs.unlinkSync(LOCK_FILE)
+        }
+      } catch {
+        /* ... */
+      }
 
       // DO NOT close httpServer — it's shared, other instances use it
     },
